@@ -78,10 +78,12 @@ interface ScenarioEntry {
   evidence_level: ScenarioEvidenceLevel;
   waste_age_years: number;
   dominant_phase: DominantPhase;
+  active_zones: string[];
   substrate_inventory: SubstrateInventoryItem[];
   leachate_chemistry: ScenarioLeachateChemistry;
   expected_species: { [mineralId: string]: ScenarioExpectedSpecies };
   player_brief: string;
+  _active_zones_note?: string;
 }
 
 interface ScenarioSpecFile {

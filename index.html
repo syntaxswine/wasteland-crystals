@@ -26,6 +26,39 @@
       white-space: pre-wrap;
     }
     .dim { color: #5c4a1a; }
+
+    /* Scenario selector — boxed cyber-engineering button row sitting above
+       the schematic. Active button reverses fill/stroke so it reads as
+       'this is the cell currently on the work-table'. */
+    nav#scenario-selector {
+      margin: 0.5em 0 0.75em 0;
+      display: flex;
+      gap: 0.5em;
+      flex-wrap: wrap;
+      font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+    nav#scenario-selector button {
+      background: transparent;
+      border: 1px solid #5c4a1a;
+      color: #b48a2c;
+      padding: 0.3em 0.9em;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: inherit;
+      letter-spacing: inherit;
+    }
+    nav#scenario-selector button:hover {
+      border-color: #d4af37;
+      color: #d4af37;
+    }
+    nav#scenario-selector button.active {
+      background: #1a1308;
+      border-color: #d4af37;
+      color: #d4af37;
+    }
+
     main#schematic-container {
       display: block;
       background-color: #050a14;
@@ -57,6 +90,7 @@
 <body>
   <h1>WASTELAND CRYSTALS — BOOT</h1>
   <pre id="boot-log">[INIT] no engine loaded yet</pre>
+  <nav id="scenario-selector"></nav>
   <main id="schematic-container"></main>
   <script>
     // === BUILD:bundle:start ===
@@ -214,6 +248,192 @@ async function _loadZoneSpec() {
 }
 _loadZoneSpec();
 
+// ── 03-crystal-positions.js ──
+
+// ============================================================
+// js/03-crystal-positions.ts — deterministic crystal-dot generator
+// ============================================================
+//
+// Given a scenario + the loaded zones + minerals catalogs, returns a list of
+// dot positions in cell-local coordinates (meters), each tagged with its
+// mineral_id and evidence_role. Used by the renderer to scatter "simple
+// dots for the crystal locations" (boss instruction 2026-05-07) over the
+// schematic — pre-engine placeholder for what will eventually be the
+// per-cell crystal-growth model output.
+//
+// Design choices:
+// - Active_zones is NOT a placement filter. Crystals nucleated in zones
+//   that have since waned still persist (a future-miner sees ACCUMULATED
+//   paragenesis since cell closure, not just the current chemistry
+//   snapshot). active_zones gates only the zone TINTS in the schematic.
+// - Placement uses zones.json expected_mineral_clusters: a mineral grows
+//   wherever the zone has it in its expected cluster, regardless of the
+//   scenario's current phase.
+// - Dot count per (zone, mineral) scales with evidence_role:
+//     directly_observed                   → 6 dots
+//     implied_by_substrate_chemistry      → 4 dots
+//     predicted_from_program_synthesis    → 2 dots
+// - Determinism: mulberry32 PRNG seeded by hash(scenario_id + mineral_id +
+//   zone_id) so dots are stable across reloads but differ across
+//   (scenario × mineral × zone) tuples.
+//
+// Future engine work will replace this generator with the per-cell
+// crystal-growth output; the dot list shape is stable so the renderer
+// can keep consuming the same data.
+// Per-mineral display color. Tokens come from minerals.json color_visual but
+// the renderer carries the canonical hex mapping (similar to how host-rock
+// colors live in the renderer in vugg-simulator's host-rock branch).
+// Picked to be visually distinct over the dark cyberpunk backdrop and to
+// match each mineral's real-world reference color where possible.
+const MINERAL_COLORS = {
+    // Sulfates
+    goslarite: "#f5f0e6", // white acicular efflorescence
+    anglesite: "#e8e0c0", // tabular white-cream
+    jarosite: "#c08828", // ochre-yellow
+    posnjakite: "#3070b0", // posnjakite blue
+    // Carbonates
+    malachite: "#2d9c4c", // malachite green
+    hydrozincite: "#d8d0c0", // off-white pearl
+    cerussite: "#e8d8c0", // pale cream
+    calcite: "#e0dcb8", // ivory
+    // Halide-hydroxides / hydroxide-halides
+    simonkolleite: "#8cb8b8", // pale blue-grey
+    atacamite: "#1cac6c", // electric atacamite green
+    // Phosphates
+    pyromorphite: "#90b840", // olive-green hexagonal prisms
+    struvite: "#e8e0d4", // white-prismatic
+    vivianite: "#3a5fa8", // vivianite blue (oxidized)
+    // Oxides
+    ettringite: "#f0eadc", // white acicular
+    goethite: "#9a5424", // ferric brown
+    tenorite: "#1a1a1a", // black
+    cuprite: "#a02828", // ruby red
+    // Sulfides
+    sphalerite: "#c0883c", // amber to dark brown
+    galena: "#8a8a92", // lead grey
+    pyrite: "#d8b438", // brassy gold
+    covellite: "#283c70", // indigo-blue
+    // Native metals
+    native_copper: "#b87038", // copper red-brown
+    native_silver: "#dcdce0", // silver-grey
+};
+const FALLBACK_DOT_COLOR = "#888888";
+function mineralDotColor(mineralId) {
+    return MINERAL_COLORS[mineralId] ?? FALLBACK_DOT_COLOR;
+}
+function _dotsForRole(role) {
+    if (role === "directly_observed")
+        return 6;
+    if (role === "implied_by_substrate_chemistry")
+        return 4;
+    if (role === "predicted_from_program_synthesis")
+        return 2;
+    return 1;
+}
+// mulberry32 PRNG — deterministic, fast, reasonable distribution.
+function _mulberry32(seed) {
+    let t = seed >>> 0;
+    return function () {
+        t = (t + 0x6D2B79F5) >>> 0;
+        let r = t;
+        r = Math.imul(r ^ (r >>> 15), r | 1);
+        r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+}
+// Cheap string hash → uint32. Good enough for seed derivation.
+function _hashStr(s) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+}
+function _widthAtDepth(geom, mDepth) {
+    const t = mDepth / geom.cellDepthM;
+    const w = geom.cellTopWidthM * (1 - t) + geom.cellBottomWidthM * t;
+    const cx = geom.nativeFlankWidthM + geom.cellTopWidthM / 2;
+    return { leftXM: cx - w / 2, rightXM: cx + w / 2 };
+}
+// Sample one dot position within a zone's geometry. Reads zone shape from
+// a zone entry (any cast — the actual ZoneEntry type lives in 02-zone-spec).
+function _sampleZonePoint(zone, geom, rng) {
+    if (zone.position_class === "depth_band") {
+        // Pick a depth fraction within [depth_frac_top, depth_frac_bottom],
+        // then a horizontal fraction within radial_extent_frac of that depth's
+        // cell width, centered.
+        const ft = zone.geometry.depth_frac_top;
+        const fb = zone.geometry.depth_frac_bottom;
+        const rextent = zone.geometry.radial_extent_frac;
+        const f = ft + rng() * (fb - ft);
+        const mDepth = f * geom.cellDepthM;
+        const w = _widthAtDepth(geom, mDepth);
+        const cellWidthM = w.rightXM - w.leftXM;
+        const usableWidthM = cellWidthM * rextent;
+        const cx = (w.leftXM + w.rightXM) / 2;
+        const xOffset = (rng() - 0.5) * usableWidthM;
+        return { x_m: cx + xOffset, y_m: geom.cellTopYM + mDepth };
+    }
+    else if (zone.position_class === "wall_band") {
+        const inset = zone.geometry.inset_m;
+        // Pick a depth within the cell, then place on left or right wall flank.
+        const mDepth = rng() * geom.cellDepthM;
+        const w = _widthAtDepth(geom, mDepth);
+        const useLeft = rng() < 0.5;
+        const wallX = useLeft ? w.leftXM : w.rightXM;
+        const insetSign = useLeft ? +1 : -1;
+        const xOffset = rng() * inset * insetSign;
+        return { x_m: wallX + xOffset, y_m: geom.cellTopYM + mDepth };
+    }
+    else if (zone.position_class === "bottom_strip") {
+        // LCS layer: y in [cellTopYM + cellDepthM - lowerLayersM, +lcsThicknessM],
+        // x within the cell width at that depth.
+        const yTopOfLcsM = geom.cellTopYM + geom.cellDepthM - geom.lowerLayersM;
+        const yBotOfLcsM = yTopOfLcsM + geom.lcsThicknessM;
+        const mDepth = (yTopOfLcsM + rng() * (yBotOfLcsM - yTopOfLcsM)) - geom.cellTopYM;
+        const w = _widthAtDepth(geom, mDepth);
+        const cellWidthM = w.rightXM - w.leftXM;
+        const cx = (w.leftXM + w.rightXM) / 2;
+        const xOffset = (rng() - 0.5) * cellWidthM * 0.92; // keep dots a hair inside the LCS strip
+        return { x_m: cx + xOffset, y_m: geom.cellTopYM + mDepth };
+    }
+    // Fallback — shouldn't hit if zone JSON is well-formed.
+    return { x_m: geom.nativeFlankWidthM + geom.cellTopWidthM / 2, y_m: geom.cellTopYM + geom.cellDepthM / 2 };
+}
+function generateCrystalDots(scenario, zoneSpec, mineralSpec, geom) {
+    const dots = [];
+    if (!scenario || !zoneSpec)
+        return dots;
+    const expectedSpecies = scenario.expected_species ?? {};
+    for (const mineralId of Object.keys(expectedSpecies)) {
+        const speciesEntry = expectedSpecies[mineralId];
+        const role = speciesEntry.evidence_role;
+        const dotsPerZone = _dotsForRole(role);
+        // Find which zones reference this mineral in expected_mineral_clusters.
+        // Note: NOT filtered by scenario.active_zones — see file header for why.
+        for (const zoneId of Object.keys(zoneSpec)) {
+            const zone = zoneSpec[zoneId];
+            const cluster = zone.expected_mineral_clusters ?? [];
+            if (!cluster.includes(mineralId))
+                continue;
+            const seed = _hashStr(`${scenario.id}|${mineralId}|${zoneId}`);
+            const rng = _mulberry32(seed);
+            for (let i = 0; i < dotsPerZone; i++) {
+                const pt = _sampleZonePoint(zone, geom, rng);
+                dots.push({
+                    x_m: pt.x_m,
+                    y_m: pt.y_m,
+                    mineral_id: mineralId,
+                    evidence_role: role,
+                    zone_id: zoneId,
+                });
+            }
+        }
+    }
+    return dots;
+}
+
 // ── 15-version.js ──
 
 // ============================================================
@@ -311,7 +531,32 @@ _loadZoneSpec();
 //        chemistry × per zone phase, all three axes) — even though
 //        no engine math runs yet, defining zones changes which
 //        minerals will nucleate where when it does.
-const WASTELAND_VERSION = "v4";
+//
+//   v5 — per-scenario filtering + crystal dots (2026-05-07): scenarios
+//        gain an active_zones field declaring which zones run active
+//        chemistry at the snapshot. Mont-Saint-Guibert (stable phase,
+//        30 yrs) → 5 zones active, acidogenic_horizon dropped (long
+//        since drained into the methanogenic front). Halbenrain
+//        (methanogenic phase, 25 yrs) → 5 zones active, stable_basal
+//        dropped (late paragenesis hasn't matured yet). Renderer
+//        accepts an opts object {zoneSpec, scenario} — scenario
+//        filters zone tints/labels to active_zones, and triggers
+//        crystal-dot generation. Crystal dots: deterministic (mulberry32
+//        seeded by hash(scenario_id + mineral_id + zone_id)) so the
+//        same cell always presents the same paragenesis. Dot count
+//        scales with evidence_role (directly_observed=6, implied=4,
+//        predicted=2 per matching zone). Per-mineral colors carried
+//        in 03-crystal-positions.ts MINERAL_COLORS palette. CRITICAL
+//        DESIGN NOTE: dots use the FULL zoneSpec for placement (not
+//        active_zones) — a relict crystal nucleated in a zone that
+//        has since waned still persists physically; the future-miner
+//        sees ACCUMULATED paragenesis. active_zones = current chemistry
+//        territory (tint); dots = accumulated mineralogy (history).
+//        The two systems compose, they don't gate each other. Boot
+//        adds a scenario-selector nav above the schematic
+//        ([OVERVIEW] [MONT-SAINT-GUIBERT] [HALBENRAIN]); clicking
+//        re-renders. OVERVIEW shows all zones, no crystals.
+const WASTELAND_VERSION = "v5";
 
 // ── 99-renderer-cross-section.js ──
 
@@ -366,13 +611,22 @@ const DEFAULT_SCHEMATIC = {
     gasVentXFractions: [0.18, 0.45, 0.78],
     monitoringWellXOffsetsM: [10, 10],
 };
-function renderCrossSectionInto(container, zoneSpec) {
+function renderCrossSectionInto(container, opts) {
     if (!container)
         return;
     const cfg = DEFAULT_SCHEMATIC;
-    container.innerHTML = buildSchematicSVG(cfg, zoneSpec ?? null);
+    container.innerHTML = buildSchematicSVG(cfg, opts ?? {});
 }
-function buildSchematicSVG(cfg, zoneSpec) {
+function buildSchematicSVG(cfg, opts) {
+    const zoneSpec = opts.zoneSpec ?? null;
+    const scenario = opts.scenario ?? null;
+    // Effective zone subset for tinting: when a scenario is selected, only
+    // its active_zones render; otherwise (OVERVIEW mode) all zones render.
+    // Crystal dot placement uses the FULL zoneSpec regardless — see
+    // 03-crystal-positions.ts header for the active_zones-vs-history split.
+    const activeZoneIds = scenario && scenario.active_zones
+        ? new Set(scenario.active_zones)
+        : null;
     // World extents in meters
     const totalWidthM = cfg.cellTopWidthM + 2 * cfg.nativeFlankWidthM;
     const cellEngineeredM = cfg.upperLayers.reduce((s, l) => s + l.thicknessM, 0) +
@@ -474,6 +728,10 @@ function buildSchematicSVG(cfg, zoneSpec) {
     if (zoneSpec) {
         parts.push(`<g class="zone-overlay">`);
         for (const id of Object.keys(zoneSpec)) {
+            // Per-scenario filtering: skip zones not in active_zones when a scenario
+            // is selected. OVERVIEW mode (no scenario) renders all zones.
+            if (activeZoneIds && !activeZoneIds.has(id))
+                continue;
             const z = zoneSpec[id];
             const cls = `zone-${z.color_visual}`;
             const stroke = z.boundary_style === "solid" ? "zone-boundary-solid" : (z.boundary_style === "none" ? "" : "zone-boundary-dashed");
@@ -539,6 +797,8 @@ function buildSchematicSVG(cfg, zoneSpec) {
         // mid-depth, sized to fit the narrow band; bottom_strip → skipped (relies
         // on the existing right-side LCS layer-label).
         for (const id of Object.keys(zoneSpec)) {
+            if (activeZoneIds && !activeZoneIds.has(id))
+                continue;
             const z = zoneSpec[id];
             const cls = `zone-label zone-label-${z.color_visual}`;
             if (z.position_class === "depth_band") {
@@ -563,6 +823,39 @@ function buildSchematicSVG(cfg, zoneSpec) {
             // bottom_strip: skipped intentionally (LCS layer-label on the right covers it)
         }
         parts.push(`</g>`); // end zone-overlay group
+    }
+    // ── Crystal-dot overlay ──
+    // Placeholder for the future per-cell crystal-growth output. Generates
+    // deterministic dots from scenario.expected_species × zones.json
+    // expected_mineral_clusters (see 03-crystal-positions.ts). Dots use the
+    // FULL zoneSpec for placement (not active_zones) — relict crystals
+    // remain visible at their historical zones even after that zone has
+    // waned at the scenario's snapshot.
+    if (scenario && zoneSpec && typeof generateCrystalDots === "function") {
+        const upperLayersMTotal = cfg.upperLayers.reduce((s, l) => s + l.thicknessM, 0);
+        const lowerLayersMTotal = cfg.lowerLayers.reduce((s, l) => s + l.thicknessM, 0);
+        const geom = {
+            cellTopWidthM: cfg.cellTopWidthM,
+            cellBottomWidthM: cfg.cellBottomWidthM,
+            cellDepthM: cfg.cellDepthM,
+            nativeFlankWidthM: cfg.nativeFlankWidthM,
+            upperLayersM: upperLayersMTotal,
+            lowerLayersM: lowerLayersMTotal,
+            cellTopYM: cellTopYM,
+            lcsThicknessM: cfg.lowerLayers[0].thicknessM,
+        };
+        const dots = generateCrystalDots(scenario, zoneSpec, null, geom);
+        parts.push(`<g class="crystal-dots">`);
+        for (const d of dots) {
+            const fill = mineralDotColor(d.mineral_id);
+            // Radius scales lightly with evidence_role: directly_observed dots
+            // sit a hair larger so the catalog's strongest pedigree reads first.
+            const r = d.evidence_role === "directly_observed" ? 2.6
+                : d.evidence_role === "implied_by_substrate_chemistry" ? 2.0
+                    : 1.6;
+            parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" />`);
+        }
+        parts.push(`</g>`); // end crystal-dots group
     }
     parts.push(`</g>`); // end cellClip group
     // Cell pit outline (the engineered boundary)
@@ -776,6 +1069,18 @@ function svgStyle() {
     .zone-label-drainage_pale_teal  { fill: #6cb0b0; }
     .zone-label-deep_purple_stable  { fill: #b078d8; }
     .zone-label-biofilm_pale_green  { fill: #80c898; }
+
+    /* Crystal-dot overlay — placeholder for the future per-cell crystal-
+       growth model output. Stroke is a thin dark outline so each dot pops
+       against whatever zone tint or lift band sits behind it; fill is set
+       inline per-dot from the mineral's color. directly_observed dots get
+       a subtle white halo to signal the strongest evidence pedigree;
+       implied / predicted are unhaloed so the tier difference reads at
+       a glance. */
+    .dot { stroke: #0a0a0a; stroke-width: 0.4; stroke-opacity: 0.9; }
+    .dot-directly_observed              { stroke: #ffffff; stroke-width: 0.45; stroke-opacity: 0.55; }
+    .dot-implied_by_substrate_chemistry { /* default outline only */ }
+    .dot-predicted_from_program_synthesis { stroke-opacity: 0.5; }
   </style>`;
 }
 
@@ -833,9 +1138,11 @@ function svgStyle() {
                 else if (role === "implied_by_substrate_chemistry") nImp++;
                 else if (role === "predicted_from_program_synthesis") nPred++;
               }
-              pre.textContent += "\n[CELL]   " + s.id + " — " + loc + " (" + s.dominant_phase + ", " + s.evidence_level + ")";
+              var nActiveZones = (s.active_zones && s.active_zones.length) || 0;
+              pre.textContent += "\n[CELL]   " + s.id + " — " + loc + " (" + s.dominant_phase + ", " + s.evidence_level + ", " + nActiveZones + " active zones)";
               pre.textContent += "\n[CELL]     " + keys.length + " expected species: " + nObs + " observed / " + nImp + " implied / " + nPred + " predicted";
             }
+            tryBuildScenarioSelector();
           }
         });
       }
@@ -850,18 +1157,76 @@ function svgStyle() {
               var nMin = z.expected_mineral_clusters.length;
               pre.textContent += "\n[ZONE]   " + z.id + " — " + z.position_class + " (" + z.typical_phase + ", " + z.typical_redox + ", " + nMin + " expected minerals)";
             }
-            // Re-render the schematic with the zone overlay. The first render
-            // (above) was synchronous and zone-less; this second pass repaints
-            // with chemistry territory drawn over the lift bands.
+            // Re-render the schematic with the zone overlay (OVERVIEW mode —
+            // all zones, no scenario filter). The first render (above) was
+            // synchronous and zone-less; this second pass repaints with
+            // chemistry territory drawn over the lift bands.
             if (typeof renderCrossSectionInto === "function") {
               try {
-                renderCrossSectionInto(document.getElementById("schematic-container"), ZONE_SPEC);
+                renderCrossSectionInto(document.getElementById("schematic-container"), { zoneSpec: ZONE_SPEC });
               } catch (e) {
                 pre.textContent += "\n[ERR] zone-overlay re-render threw: " + (e && e.message ? e.message : e);
               }
             }
+            tryBuildScenarioSelector();
           }
         });
+      }
+
+      // Active-scenario state. null = OVERVIEW (all zones, no crystal dots);
+      // otherwise the SCENARIO_SPEC entry whose active_zones filter the
+      // schematic and whose expected_species drive the dot placement.
+      var activeScenarioId = null;
+
+      function rerenderForActiveScenario() {
+        if (typeof renderCrossSectionInto !== "function") return;
+        var opts = { zoneSpec: typeof ZONE_SPEC !== "undefined" ? ZONE_SPEC : null };
+        if (activeScenarioId && typeof SCENARIO_SPEC !== "undefined" && SCENARIO_SPEC && SCENARIO_SPEC[activeScenarioId]) {
+          opts.scenario = SCENARIO_SPEC[activeScenarioId];
+        }
+        try {
+          renderCrossSectionInto(document.getElementById("schematic-container"), opts);
+        } catch (e) {
+          pre.textContent += "\n[ERR] re-render threw: " + (e && e.message ? e.message : e);
+        }
+      }
+
+      function tryBuildScenarioSelector() {
+        var zonesReady = typeof ZONE_SPEC !== "undefined" && ZONE_SPEC !== null;
+        var scenariosReady = typeof SCENARIO_SPEC !== "undefined" && SCENARIO_SPEC !== null;
+        if (!zonesReady || !scenariosReady) return;
+        var nav = document.getElementById("scenario-selector");
+        if (!nav || nav.dataset.built === "1") return;
+        nav.dataset.built = "1";
+
+        function makeBtn(id, label) {
+          var b = document.createElement("button");
+          b.textContent = label;
+          b.dataset.scenarioId = id || "";
+          if ((id || null) === activeScenarioId) b.classList.add("active");
+          b.addEventListener("click", function () {
+            activeScenarioId = id || null;
+            // Update button highlighting
+            var btns = nav.querySelectorAll("button");
+            for (var i = 0; i < btns.length; i++) {
+              var bid = btns[i].dataset.scenarioId || null;
+              if (bid === activeScenarioId) btns[i].classList.add("active");
+              else btns[i].classList.remove("active");
+            }
+            rerenderForActiveScenario();
+          });
+          return b;
+        }
+
+        nav.appendChild(makeBtn("", "[ OVERVIEW ]"));
+        var ids = Object.keys(SCENARIO_SPEC);
+        for (var i = 0; i < ids.length; i++) {
+          var s = SCENARIO_SPEC[ids[i]];
+          // Use the locality as the button label — short, all-caps, matches
+          // the surveyor's-voice register of the player_brief.
+          var label = "[ " + s.location.locality.toUpperCase() + " ]";
+          nav.appendChild(makeBtn(ids[i], label));
+        }
       }
     })();
   </script>

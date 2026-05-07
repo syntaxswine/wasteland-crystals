@@ -93,5 +93,30 @@
 //        chemistry × per zone phase, all three axes) — even though
 //        no engine math runs yet, defining zones changes which
 //        minerals will nucleate where when it does.
+//
+//   v5 — per-scenario filtering + crystal dots (2026-05-07): scenarios
+//        gain an active_zones field declaring which zones run active
+//        chemistry at the snapshot. Mont-Saint-Guibert (stable phase,
+//        30 yrs) → 5 zones active, acidogenic_horizon dropped (long
+//        since drained into the methanogenic front). Halbenrain
+//        (methanogenic phase, 25 yrs) → 5 zones active, stable_basal
+//        dropped (late paragenesis hasn't matured yet). Renderer
+//        accepts an opts object {zoneSpec, scenario} — scenario
+//        filters zone tints/labels to active_zones, and triggers
+//        crystal-dot generation. Crystal dots: deterministic (mulberry32
+//        seeded by hash(scenario_id + mineral_id + zone_id)) so the
+//        same cell always presents the same paragenesis. Dot count
+//        scales with evidence_role (directly_observed=6, implied=4,
+//        predicted=2 per matching zone). Per-mineral colors carried
+//        in 03-crystal-positions.ts MINERAL_COLORS palette. CRITICAL
+//        DESIGN NOTE: dots use the FULL zoneSpec for placement (not
+//        active_zones) — a relict crystal nucleated in a zone that
+//        has since waned still persists physically; the future-miner
+//        sees ACCUMULATED paragenesis. active_zones = current chemistry
+//        territory (tint); dots = accumulated mineralogy (history).
+//        The two systems compose, they don't gate each other. Boot
+//        adds a scenario-selector nav above the schematic
+//        ([OVERVIEW] [MONT-SAINT-GUIBERT] [HALBENRAIN]); clicking
+//        re-renders. OVERVIEW shows all zones, no crystals.
 
-const WASTELAND_VERSION = "v4";
+const WASTELAND_VERSION = "v5";

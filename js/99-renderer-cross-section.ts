@@ -87,18 +87,32 @@ const DEFAULT_SCHEMATIC: SchematicConfig = {
   monitoringWellXOffsetsM: [10, 10],
 };
 
-// ZoneSpec is a parameter to keep the renderer module-independent — the actual
-// type is declared in 02-zone-spec.ts (loaded as a sibling module). We accept
-// any dict-of-zone-entries shape to avoid a hard cross-module type dep.
+// ZoneSpec / ScenarioEntry are parameters to keep the renderer module-
+// independent — the actual types are declared in their respective spec files.
+// We accept any-cast shapes to avoid hard cross-module type deps.
 type ZoneSpecMap = { [id: string]: any };
 
-function renderCrossSectionInto(container: HTMLElement, zoneSpec?: ZoneSpecMap | null): void {
-  if (!container) return;
-  const cfg = DEFAULT_SCHEMATIC;
-  container.innerHTML = buildSchematicSVG(cfg, zoneSpec ?? null);
+interface RenderOpts {
+  zoneSpec?: ZoneSpecMap | null;
+  scenario?: any | null;  // ScenarioEntry from 01-scenario-spec; when set, zones filter to scenario.active_zones and crystal dots render
 }
 
-function buildSchematicSVG(cfg: SchematicConfig, zoneSpec: ZoneSpecMap | null): string {
+function renderCrossSectionInto(container: HTMLElement, opts?: RenderOpts): void {
+  if (!container) return;
+  const cfg = DEFAULT_SCHEMATIC;
+  container.innerHTML = buildSchematicSVG(cfg, opts ?? {});
+}
+
+function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
+  const zoneSpec = opts.zoneSpec ?? null;
+  const scenario = opts.scenario ?? null;
+  // Effective zone subset for tinting: when a scenario is selected, only
+  // its active_zones render; otherwise (OVERVIEW mode) all zones render.
+  // Crystal dot placement uses the FULL zoneSpec regardless — see
+  // 03-crystal-positions.ts header for the active_zones-vs-history split.
+  const activeZoneIds: Set<string> | null = scenario && scenario.active_zones
+    ? new Set<string>(scenario.active_zones)
+    : null;
   // World extents in meters
   const totalWidthM = cfg.cellTopWidthM + 2 * cfg.nativeFlankWidthM;
   const cellEngineeredM =
@@ -218,6 +232,9 @@ function buildSchematicSVG(cfg: SchematicConfig, zoneSpec: ZoneSpecMap | null): 
   if (zoneSpec) {
     parts.push(`<g class="zone-overlay">`);
     for (const id of Object.keys(zoneSpec)) {
+      // Per-scenario filtering: skip zones not in active_zones when a scenario
+      // is selected. OVERVIEW mode (no scenario) renders all zones.
+      if (activeZoneIds && !activeZoneIds.has(id)) continue;
       const z = zoneSpec[id];
       const cls = `zone-${z.color_visual}`;
       const stroke = z.boundary_style === "solid" ? "zone-boundary-solid" : (z.boundary_style === "none" ? "" : "zone-boundary-dashed");
@@ -282,6 +299,7 @@ function buildSchematicSVG(cfg: SchematicConfig, zoneSpec: ZoneSpecMap | null): 
     // mid-depth, sized to fit the narrow band; bottom_strip → skipped (relies
     // on the existing right-side LCS layer-label).
     for (const id of Object.keys(zoneSpec)) {
+      if (activeZoneIds && !activeZoneIds.has(id)) continue;
       const z = zoneSpec[id];
       const cls = `zone-label zone-label-${z.color_visual}`;
       if (z.position_class === "depth_band") {
@@ -305,6 +323,40 @@ function buildSchematicSVG(cfg: SchematicConfig, zoneSpec: ZoneSpecMap | null): 
       // bottom_strip: skipped intentionally (LCS layer-label on the right covers it)
     }
     parts.push(`</g>`); // end zone-overlay group
+  }
+
+  // ── Crystal-dot overlay ──
+  // Placeholder for the future per-cell crystal-growth output. Generates
+  // deterministic dots from scenario.expected_species × zones.json
+  // expected_mineral_clusters (see 03-crystal-positions.ts). Dots use the
+  // FULL zoneSpec for placement (not active_zones) — relict crystals
+  // remain visible at their historical zones even after that zone has
+  // waned at the scenario's snapshot.
+  if (scenario && zoneSpec && typeof generateCrystalDots === "function") {
+    const upperLayersMTotal = cfg.upperLayers.reduce((s, l) => s + l.thicknessM, 0);
+    const lowerLayersMTotal = cfg.lowerLayers.reduce((s, l) => s + l.thicknessM, 0);
+    const geom = {
+      cellTopWidthM: cfg.cellTopWidthM,
+      cellBottomWidthM: cfg.cellBottomWidthM,
+      cellDepthM: cfg.cellDepthM,
+      nativeFlankWidthM: cfg.nativeFlankWidthM,
+      upperLayersM: upperLayersMTotal,
+      lowerLayersM: lowerLayersMTotal,
+      cellTopYM: cellTopYM,
+      lcsThicknessM: cfg.lowerLayers[0].thicknessM,
+    };
+    const dots = generateCrystalDots(scenario, zoneSpec, null, geom);
+    parts.push(`<g class="crystal-dots">`);
+    for (const d of dots) {
+      const fill = mineralDotColor(d.mineral_id);
+      // Radius scales lightly with evidence_role: directly_observed dots
+      // sit a hair larger so the catalog's strongest pedigree reads first.
+      const r = d.evidence_role === "directly_observed" ? 2.6
+              : d.evidence_role === "implied_by_substrate_chemistry" ? 2.0
+              : 1.6;
+      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" />`);
+    }
+    parts.push(`</g>`); // end crystal-dots group
   }
 
   parts.push(`</g>`); // end cellClip group
@@ -534,5 +586,17 @@ function svgStyle(): string {
     .zone-label-drainage_pale_teal  { fill: #6cb0b0; }
     .zone-label-deep_purple_stable  { fill: #b078d8; }
     .zone-label-biofilm_pale_green  { fill: #80c898; }
+
+    /* Crystal-dot overlay — placeholder for the future per-cell crystal-
+       growth model output. Stroke is a thin dark outline so each dot pops
+       against whatever zone tint or lift band sits behind it; fill is set
+       inline per-dot from the mineral's color. directly_observed dots get
+       a subtle white halo to signal the strongest evidence pedigree;
+       implied / predicted are unhaloed so the tier difference reads at
+       a glance. */
+    .dot { stroke: #0a0a0a; stroke-width: 0.4; stroke-opacity: 0.9; }
+    .dot-directly_observed              { stroke: #ffffff; stroke-width: 0.45; stroke-opacity: 0.55; }
+    .dot-implied_by_substrate_chemistry { /* default outline only */ }
+    .dot-predicted_from_program_synthesis { stroke-opacity: 0.5; }
   </style>`;
 }

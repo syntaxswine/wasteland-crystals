@@ -18,6 +18,7 @@
     "substrate_inventory": "Array of substrate-token references (matching minerals.json substrate_grows_on tokens) with per-token note describing the documented relics at this site.",
     "leachate_chemistry": "Characteristic ion concentrations for the dominant_phase. Values typical of the phase rather than direct measurement — only Pb/PO4/Cl/Zn/S2 are reported with site-specific pedigree where the citation supports it. Honest about evidence.",
     "expected_species": "Map from mineral catalog ID to {evidence_role, note}. evidence_role: directly_observed (XRD/SEM identification in the cited paper) | implied_by_substrate_chemistry (the relics + leachate make the phase chemically necessary, but the paper does not name it) | predicted_from_program_synthesis (the phase appears in a related ELFM review covering this site without being named in a site-specific paper).",
+    "active_zones": "Subset of zone IDs (from data/zones.json) currently dominant or running active chemistry at this scenario's snapshot. The renderer tints only these in the schematic. NOTE: this is a current-chemistry filter, not a crystal-presence filter — crystals nucleated in any historically-active zone persist even after the zone has waned, so the crystal-dot generator places dots based on the mineral's expected zones in zones.json regardless of active_zones state. The two systems are complementary: active_zones = current chemistry territory; crystal dots = accumulated paragenesis since cell closure.",
     "player_brief": "3-4 sentences in clinical-Borges register — the surveyor introducing the cell. No second-person addresses, no game framing; treat the brief as a corporate-quarterly-report intro paragraph for the working cell."
   },
 
@@ -54,6 +55,8 @@
       "evidence_level": "landfill_specific",
       "waste_age_years": 30,
       "dominant_phase": "stable",
+      "active_zones": ["cap_contact", "methanogenic_core", "wall_contact_flank", "stable_basal", "lcs_biofilm"],
+      "_active_zones_note": "Stable-phase cell at 30 yrs: acidogenic_horizon has been buried by the methanogenic front migrating upward (no longer running active acid chemistry); the other five zones are all currently active. stable_basal is the dominant late-paragenesis zone — the diagnostic Garcia Lopez pyromorphite + sphalerite + Pb-Ca-Cl-PO4 convergence matures here. Anglesite dots will still appear in the (now-untinted) acidogenic_horizon area as relict crystals from the earlier acidic phase.",
       "substrate_inventory": [
         {"token": "lead_acid_battery", "note": "Metallic Pb fragments identified by Garcia Lopez et al. as relics of corroded battery plates. Anchors the Pb chemistry."},
         {"token": "galvanized_steel", "note": "Fe-Zn alloy fragments identified in the <4.5 mm fines. Substrate for both sphalerite (reducing) and the Zn-sulfate weathering products (oxidizing)."},
@@ -114,6 +117,8 @@
       "evidence_level": "program_synthesis",
       "waste_age_years": 25,
       "dominant_phase": "methanogenic",
+      "active_zones": ["cap_contact", "acidogenic_horizon", "methanogenic_core", "wall_contact_flank", "lcs_biofilm"],
+      "_active_zones_note": "Methanogenic-phase cell at 25 yrs: still has the acidogenic_horizon as an active band (acid chemistry hasn't fully drained into the methanogenic front yet); methanogenic_core is the dominant zone. stable_basal is NOT yet active — late paragenesis hasn't matured to the stable phase. Pyromorphite dots will appear in the (now-untinted) stable_basal area as seed crystals already forming via diffusion from the methanogenic core, but at lower density than Mont-Saint-Guibert's stable-phase yield.",
       "substrate_inventory": [
         {"token": "lead_acid_battery", "note": "Battery relics inferred from the NEW-MINE program inventory — typical European municipal cell composition. Halbenrain-specific phase characterization at this granularity is not separately published."},
         {"token": "galvanized_steel", "note": "Galvanized fines reported in the program-level review. Chemistry parallels Mont-Saint-Guibert's substrate set."},
