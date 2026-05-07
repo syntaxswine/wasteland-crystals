@@ -1,0 +1,29 @@
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+.npm/
+.eslintcache
+
+# Build artifacts
+build/
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test output
+coverage/
+.nyc_output/
+
+# Environment
+.env
+.env.local
+.env.*.local
