@@ -1,17 +1,17 @@
 {
-  "_schema_version": "0.1.0",
+  "_schema_version": "0.2.0",
   "_last_updated": "2026-05-07",
   "_source_of_truth_for": ["index.html", "research/landfill-chemistry-and-fires.md"],
-  "_source_of_truth_note": "Canonical anthropogenic-mineral spec for Wasteland Crystals. Every entry must defer to documented chemistry — see citations field. Minerals confirmed in real landfill mining or LCS scaling studies are flagged documented_in_landfills:true; minerals predicted from chemistry parallel but not yet observed in landfills specifically are flagged documented_in_landfills:false (with a note in the description). The literal-vug-from-buried-appliance design principle (see proposals/PROPOSAL-WASTELAND-CRYSTALS.md and project memory) means substrate_grows_on values are the engineered substrate the mineral nucleates onto, not host rock.",
+  "_source_of_truth_note": "Canonical anthropogenic-mineral spec for Wasteland Crystals. Every entry must defer to documented chemistry — see citations field. The evidence_level field (replacing v0.1's documented_in_landfills binary) tells the truth about what kind of literature supports each entry. The literal-vug-from-buried-appliance design principle (proposals/PROPOSAL-WASTELAND-CRYSTALS.md and project memory) means substrate_grows_on values are the engineered substrate the mineral nucleates onto, not host rock.",
 
   "_schema": {
     "formula": "Chemical formula (string).",
     "class": "Mineralogical class for filtering, engine dispatch, and renderer color: sulfate | carbonate | halide_hydroxide | hydroxide_halide | phosphate | oxide | sulfide | native | mixed.",
-    "habit": "Primary crystal habit (acicular_efflorescence | hexagonal_platy | botryoidal_radial | prismatic | tabular | massive | scalenohedral | radial_acicular | etc).",
-    "substrate_grows_on": "Array of substrate-type tokens this mineral preferentially nucleates on. Tokens are wasteland-crystals-specific (galvanized_steel, copper_wire, lead_acid_battery, concrete_demolition, organic_slurry, leachate_collection_pipe, etc). Empty array = environmental, not substrate-bound.",
-    "chemistry_phase": "Array of leachate-phase tokens favoring growth: acid (pH 4.5-6.5, yrs 1-10) | methanogenic (pH 7-8.5, decades) | stable (pH 7.5-9, humic) | alkaline_cap (pH 10-12 from cement) | burn_zone (pH 10-12 oxidizing hot) | burn_halo (HCl-rich brine adjacent to burn).",
-    "decay_precursor": "Array of polymer/material decay-product tokens that supply this mineral's chemistry: pvc_hcl, drywall_sulfate, battery_h2so4, cement_calcite, food_phosphate, protein_nh4, rebar_iron, etc.",
-    "nucleation_sigma": "Minimum supersaturation for nucleation (default 1.0; >1.0 = harder to nucleate).",
+    "habit": "Primary crystal habit (acicular_efflorescence | hexagonal_platy | botryoidal_radial | prismatic | tabular | massive | scalenohedral | radial_acicular | tetrahedral | cubic | dendritic | etc).",
+    "substrate_grows_on": "Array of substrate-type tokens this mineral preferentially nucleates on. Tokens are wasteland-crystals-specific (galvanized_steel, copper_wire, lead_acid_battery, concrete_demolition, organic_slurry, leachate_collection_pipe, pcb_solder_silver, etc). Empty array = environmental, not substrate-bound.",
+    "chemistry_phase": "Array of leachate-phase tokens favoring growth: acid (pH 4.5-6.5, yrs 1-10) | methanogenic (pH 7-8.5, decades) | stable (pH 7.5-9, humic, centuries) | alkaline_cap (pH 10-12 from cement) | burn_zone (pH 10-12 oxidizing hot) | burn_halo (HCl-rich brine adjacent to burn).",
+    "decay_precursor": "Array of polymer/material decay-product tokens that supply this mineral's chemistry: pvc_hcl, drywall_sulfate, battery_h2so4, cement_calcite, food_phosphate, protein_nh4, rebar_iron, organic_co2, organic_reduction, pcb_silver_dissolution, pcb_gold_dissolution, etc.",
+    "nucleation_sigma": "Minimum supersaturation for nucleation (default 1.0; >1.0 = harder to nucleate; native metals and burn-products typically 1.2-1.6).",
     "max_size_cm": "Hard cap on crystal size in centimeters; 2× world record where applicable.",
     "growth_rate_mult": "Relative growth rate; 1.0 = baseline (calcite-equivalent).",
     "T_range_C": "[min, max] temperature window for growth in landfill conditions. Most landfill minerals: [5, 80]; burn-zone minerals can extend higher.",
@@ -21,16 +21,20 @@
     "color_visual": "Descriptive color class for the renderer (passed to mineral_art layer when that lands).",
     "description": "2-3 sentence landfill-mineralogy description in clinical-Borges register (per proposal aesthetic).",
     "citations": "Array of primary-source citations. Use short form: 'Author Year Journal Vol:Page' or 'Author Year doi:...'. The research doc (research/landfill-chemistry-and-fires.md) carries full URL/DOI form.",
-    "documented_in_landfills": "Boolean: true if the mineral has been directly observed in published landfill mining or LCS scaling case studies; false if it's predicted from chemistry parallel but no landfill case study confirms it. Honest distinction matters per project memory."
+    "evidence_level": "Evidence supporting this entry: landfill_specific (peer-reviewed report from real landfill / LCS scaling / landfill mining / MSWI bottom ash) | anthropogenic_documented (Hazen 2017 catalog or similar; well-documented at industrial/anthropogenic sites generally, not landfill-specifically) | geological_analog (well-documented in natural geological settings with chemistry directly applicable, e.g. supergene Cu zones, AMD systems, biogenic marine sediments) | chemistry_predicted (chemistry-grounded prediction without direct documentation in any context). The four levels are roughly ranked by how close the cited evidence is to a Wasteland-Crystals-specific landfill setting."
   },
 
   "_audit_summary": {
-    "total_minerals": 11,
-    "classes_covered": ["sulfate", "carbonate", "halide_hydroxide", "hydroxide_halide", "phosphate", "oxide"],
-    "classes_pending": ["sulfide", "native", "mixed"],
-    "documented_count": 10,
-    "predicted_count": 1,
-    "_notes": "First-layer text/data commit (v1). Schema + 11 worked examples spanning 6 classes. Goslarite is the proposal's chosen hello-world (proposals/PROPOSAL-WASTELAND-CRYSTALS.md §'First mineral: pick goslarite'). Simonkolleite is the most underweighted-in-naive-design phase (galvanized + Cl⁻ → 'galena of garbage'). Pyromorphite is the documented Mont-Saint-Guibert observation. Tenorite is included as a burn-zone Cu mirror to demonstrate the same-element-different-mineral mechanic against malachite/atacamite. Engine-specific fields (twin_laws, thermal_decomp, fluorescence, scenarios) left empty for later — this layer is the curated text/data spine."
+    "total_minerals": 23,
+    "classes_covered": ["sulfate", "carbonate", "halide_hydroxide", "hydroxide_halide", "phosphate", "oxide", "sulfide", "native"],
+    "classes_pending": ["mixed"],
+    "by_evidence_level": {
+      "landfill_specific": 7,
+      "anthropogenic_documented": 9,
+      "geological_analog": 4,
+      "chemistry_predicted": 3
+    },
+    "_notes": "v2 catalog expansion + evidence-level refinement. v1 used a binary documented_in_landfills flag that conflated 'observed in real landfill paper' with 'documented in anthropogenic/geological literature broadly' — the four-value evidence_level replaces it and re-categorizes all entries honestly. Several v1 entries marked documented:true in the original 0.1.0 catalog now sit at anthropogenic_documented or chemistry_predicted because Hazen 2017's catalog presence is not the same as a peer-reviewed landfill case study. Catalog now spans 8 mineralogical classes; sulfide and native classes added in v2. The chemistry-flip suite is complete or near-complete for all four major metals: Cu (malachite/atacamite/tenorite/posnjakite/covellite/cuprite/native_copper), Pb (anglesite/pyromorphite/cerussite/galena), Zn (goslarite/simonkolleite/hydrozincite/sphalerite), Fe (vivianite/pyrite/goethite/jarosite). This 'same element, different mineral' coverage is what lets the burn-zone-inverts-chemistry mechanic actually have something to invert."
   },
 
   "minerals": {
@@ -52,7 +56,7 @@
       "color_visual": "white_acicular_efflorescent",
       "description": "Hydrated zinc sulfate. Snow-white acicular efflorescence on rusting galvanized steel under acidic, sulfate-bearing leachate. Highly soluble; re-dissolves seasonally with rain and re-precipitates as pore waters concentrate, so the crust pulses rather than accumulates monotonically. The proposal's chosen hello-world mineral (proposals/PROPOSAL-WASTELAND-CRYSTALS.md §'First mineral: pick goslarite').",
       "citations": ["Hazen et al. 2017 Am Mineral 102:595 (anthropogenic mineralogy catalog)"],
-      "documented_in_landfills": true
+      "evidence_level": "anthropogenic_documented"
     },
 
     "simonkolleite": {
@@ -72,7 +76,7 @@
       "color_visual": "white_iridescent_platy",
       "description": "Basic zinc chloride hydrate. The 'galena of garbage' — galvanized steel is ubiquitous and chloride brine from PVC dehydrochlorination is ubiquitous, so simonkolleite is one of the most abundant default secondary minerals across the simulator. Forms hexagonal platy crystals with subtle iridescence. IMA-recognized anthropogenic species (Hazen 2017 supplementary table).",
       "citations": ["Hazen et al. 2017 Am Mineral 102:595"],
-      "documented_in_landfills": true
+      "evidence_level": "anthropogenic_documented"
     },
 
     "malachite": {
@@ -92,7 +96,7 @@
       "color_visual": "neon_green_botryoidal",
       "description": "Hydrated copper carbonate. Botryoidal green crusts on copper wire and pipe under carbonate-rich, mildly oxidizing leachate. The classic verdigris green of weathered copper, in this context driven by methanogenic-phase HCO3⁻ encountering exposed Cu surfaces. Pairs with atacamite (chloride-rich) and tenorite (burn zone) as the three Cu chemistry-flip mineralogies of the same Cu source.",
       "citations": ["Hazen et al. 2017 Am Mineral 102:595", "Saffarzadeh et al. 2011 Waste Manage doi:10.1016/j.wasman.2011.06.010"],
-      "documented_in_landfills": true
+      "evidence_level": "anthropogenic_documented"
     },
 
     "atacamite": {
@@ -111,8 +115,8 @@
       "required_ingredients": {"Cu": 0.5, "Cl": 100, "O2": 0.3},
       "color_visual": "electric_green_prismatic",
       "description": "Copper chloride hydroxide. Electric-green prismatic crystals on copper substrates in chloride-rich brine — the canonical burn-halo mineral where PVC dehydrochlorination releases HCl onto adjacent copper. Also forms classically in the verdigris bloom near failing celluloid, where nitric acid and trace chloride attack copper wiring.",
-      "citations": ["Hazen et al. 2017 Am Mineral 102:595", "Saffarzadeh et al. 2011 Waste Manage"],
-      "documented_in_landfills": true
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595"],
+      "evidence_level": "anthropogenic_documented"
     },
 
     "anglesite": {
@@ -130,9 +134,9 @@
       "redox_requirement": "oxidizing",
       "required_ingredients": {"Pb": 0.5, "SO4": 70, "O2": 0.3},
       "color_visual": "white_tabular_crystalline",
-      "description": "Lead sulfate. Tabular white crystals on weathering lead-acid battery casings under acidic, sulfate-bearing leachate — the diagnostic Pb-oxidation product of battery acid attack on lead plates. Documented in excavated landfill cores at Mont-Saint-Guibert (Garcia Lopez et al., Detritus 8) alongside metallic Pb relics.",
-      "citations": ["Garcia Lopez et al. Detritus 8 (Mont-Saint-Guibert ELFM)", "Hazen et al. 2017 Am Mineral 102:595"],
-      "documented_in_landfills": true
+      "description": "Lead sulfate. Tabular white crystals on weathering lead-acid battery casings under acidic, sulfate-bearing leachate — the diagnostic Pb-oxidation product of battery acid attack on lead plates. Mont-Saint-Guibert excavated cores contain metallic Pb fragments and Pb-Ca phosphates (Garcia Lopez); anglesite is the implicit sulfate weathering product of those Pb relics, though the cited paper does not name anglesite specifically.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595", "Garcia Lopez et al. Detritus 8 (Mont-Saint-Guibert ELFM, metallic Pb relics)"],
+      "evidence_level": "anthropogenic_documented"
     },
 
     "pyromorphite": {
@@ -150,9 +154,9 @@
       "redox_requirement": "any",
       "required_ingredients": {"Pb": 0.5, "PO4": 5, "Cl": 50},
       "color_visual": "olive_green_hexagonal_prisms",
-      "description": "Lead chloride phosphate. Olive-green to bright-green hexagonal prisms — directly OBSERVED in excavated landfill cores at Mont-Saint-Guibert (Garcia Lopez et al., Detritus 8). The four-way convergence of Pb (battery), PO4 (food/bone/detergent), Cl (PVC), and stable late-phase chemistry yields this unusually beautiful documented landfill phase. Probably the single best 'this is real, not invented' citation in the catalog.",
+      "description": "Lead chloride phosphate. Olive-green to bright-green hexagonal prisms — directly observed in excavated landfill cores at Mont-Saint-Guibert (Garcia Lopez et al., Detritus 8). The four-way convergence of Pb (battery), PO4 (food/bone/detergent), Cl (PVC), and stable late-phase chemistry yields this unusually beautiful documented landfill phase. Probably the single best 'this is real, not invented' citation in the catalog.",
       "citations": ["Garcia Lopez et al. Detritus 8 (Mont-Saint-Guibert ELFM)", "Hernandez Parrodi et al. 2021 Processes 9:394 doi:10.3390/pr9020394"],
-      "documented_in_landfills": true
+      "evidence_level": "landfill_specific"
     },
 
     "struvite": {
@@ -172,7 +176,7 @@
       "color_visual": "white_to_yellow_prismatic",
       "description": "Magnesium ammonium phosphate hexahydrate. Documented as a chronic leachate-collection-pipe scaling mineral and an industrial nutrient-recovery target in landfill effluent treatment (Li & Zhao 2001; Huang 2014). Diagnostic of organic-rich, ammonium-bearing pore water in the methanogenic phase — the most clearly anthropogenic of the documented 'landfill minerals,' though struvite itself is also natural in some bird-rookery and bat-guano contexts.",
       "citations": ["Li & Zhao 2001 Chemosphere 44 (seminal landfill struvite recovery)", "Huang et al. 2014 Waste Manage PMID 25043172"],
-      "documented_in_landfills": true
+      "evidence_level": "landfill_specific"
     },
 
     "ettringite": {
@@ -192,7 +196,7 @@
       "color_visual": "white_silky_needles",
       "description": "Calcium aluminum sulfate hydrate. White silky acicular needles in alkaline burn-zone or weathering-cement assemblages. One of the canonical burn-zone diagnostic minerals — pH 10-12 in burn zones is buffered partly by ettringite precipitation/dissolution. Forms wherever cement-derived Ca + Al meets drywall-derived SO4 in a high-pH window.",
       "citations": ["Saffarzadeh et al. 2011 Waste Manage doi:10.1016/j.wasman.2011.06.010", "Piantone et al. (HAL synthesis hal-03794653)"],
-      "documented_in_landfills": true
+      "evidence_level": "landfill_specific"
     },
 
     "vivianite": {
@@ -212,7 +216,7 @@
       "color_visual": "deep_indigo_blue_prismatic",
       "description": "Hydrated iron(II) phosphate. Forms in reducing, Fe-bearing pore waters with biogenic phosphate; documented as scaling in bioreactor leachate recirculation lines (Wilfert 2021). Initially colorless when freshly precipitated, oxidizes to deep indigo-blue on exposure to air — the color change itself is a redox indicator and a striking visual when an excavation cuts into a vivianite-rich layer.",
       "citations": ["Wilfert et al. 2021 Water Res doi:10.1016/j.watres.2021.117064"],
-      "documented_in_landfills": true
+      "evidence_level": "landfill_specific"
     },
 
     "calcite": {
@@ -230,9 +234,9 @@
       "redox_requirement": "any",
       "required_ingredients": {"Ca": 50, "CO3": 50},
       "color_visual": "white_translucent",
-      "description": "Calcium carbonate. The dominant scaling mineral in landfill leachate collection systems (Bennett biogeochemical clogging work) — biogenic alkalinity from sulfate-reducing and iron-reducing bacteria drives calcite saturation against pCa from cement and food-derived Ca. Late-stage carbonate cap mineralogy: precipitates over earlier sulfide and chloride seconds as cement weathering neutralizes acid leachate.",
-      "citations": ["Bennett/Fleming/Rowe biogeochemical clogging review"],
-      "documented_in_landfills": true
+      "description": "Calcium carbonate. The dominant scaling mineral in landfill leachate collection systems (Bennett biogeochemical clogging work) and a major MSWI bottom-ash weathering product (Saffarzadeh 2011) — biogenic alkalinity from sulfate-reducing and iron-reducing bacteria drives calcite saturation against pCa from cement and food-derived Ca. Late-stage carbonate cap mineralogy: precipitates over earlier sulfide and chloride seconds as cement weathering neutralizes acid leachate.",
+      "citations": ["Bennett/Fleming/Rowe biogeochemical clogging review", "Saffarzadeh et al. 2011 Waste Manage"],
+      "evidence_level": "landfill_specific"
     },
 
     "tenorite": {
@@ -250,9 +254,249 @@
       "redox_requirement": "oxidizing",
       "required_ingredients": {"Cu": 0.5, "O2": 0.3},
       "color_visual": "matte_black_to_dark_grey",
-      "description": "Copper(II) oxide. Forms in burn zones where copper substrates encounter alkaline (ettringite-buffered) oxidizing conditions at elevated temperature. The same Cu source that grows malachite (carbonate phase) and atacamite (chloride phase) in cooler zones — the burn flips the mineralogy to oxide. Visually distinct: matte black against the burn zone's red Fe-oxide and white salt-bloom assemblage. Predicted from MSWI bottom-ash Cu chemistry; exact landfill burn-zone case study not yet identified in literature, so flagged predicted-not-confirmed.",
-      "citations": ["Saffarzadeh et al. 2011 Waste Manage (MSWI bottom-ash mineralogy parallel)"],
-      "documented_in_landfills": false
+      "description": "Copper(II) oxide. Forms in burn zones where copper substrates encounter alkaline (ettringite-buffered) oxidizing conditions at elevated temperature. The same Cu source that grows malachite (carbonate phase) and atacamite (chloride phase) in cooler zones — the burn flips the mineralogy to oxide. Visually distinct: matte black against the burn zone's red Fe-oxide and white salt-bloom assemblage.",
+      "citations": ["Saffarzadeh et al. 2011 Waste Manage (MSWI bottom-ash mineralogy parallel; tenorite not specifically named)"],
+      "evidence_level": "chemistry_predicted"
+    },
+
+    "covellite": {
+      "formula": "CuS",
+      "class": "sulfide",
+      "habit": "indigo_blue_platy",
+      "substrate_grows_on": ["copper_wire", "copper_pipe", "leachate_collection_pipe"],
+      "chemistry_phase": ["methanogenic"],
+      "decay_precursor": ["drywall_sulfate_to_biogenic_h2s"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 3,
+      "growth_rate_mult": 0.5,
+      "T_range_C": [10, 50],
+      "pH_optimum": [6, 9],
+      "redox_requirement": "reducing",
+      "required_ingredients": {"Cu": 0.5, "S2": 0.5},
+      "color_visual": "indigo_blue_iridescent_platy",
+      "description": "Copper sulfide. Sulfate-reducing bacteria using drywall sulfate as electron acceptor produce H2S; H2S meets exposed Cu surfaces in the methanogenic phase and precipitates covellite as iridescent indigo-blue platy crystals. The reducing-phase Cu mineral, completing the chemistry-flip suite alongside malachite (carbonate methanogenic), atacamite (chloride acid-halo), tenorite (oxide burn), cuprite (intermediate oxide), and native_copper (extreme reducing). Same Cu source, six different minerals depending on conditions.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595"],
+      "evidence_level": "geological_analog"
+    },
+
+    "cuprite": {
+      "formula": "Cu2O",
+      "class": "oxide",
+      "habit": "octahedral_to_massive",
+      "substrate_grows_on": ["copper_wire", "copper_pipe", "bronze"],
+      "chemistry_phase": ["stable", "alkaline_cap"],
+      "decay_precursor": ["copper_oxidation_intermediate"],
+      "nucleation_sigma": 1.2,
+      "max_size_cm": 5,
+      "growth_rate_mult": 0.35,
+      "T_range_C": [5, 80],
+      "pH_optimum": [6, 10],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"Cu": 0.5, "O2": 0.1},
+      "color_visual": "ruby_red_to_dark_red_octahedral",
+      "description": "Copper(I) oxide. Dark red to ruby octahedra at the redox-cycling interface where Cu(II) reduces partway toward Cu(0). Often an intermediate phase between native copper (extreme reducing) and tenorite (oxidizing); paragenetically common as a thin reddish rind beneath a malachite or tenorite outer crust. Visually striking against the verdigris green of associated Cu carbonates.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595"],
+      "evidence_level": "geological_analog"
+    },
+
+    "native_copper": {
+      "formula": "Cu",
+      "class": "native",
+      "habit": "dendritic_wire_or_sheet",
+      "substrate_grows_on": ["copper_wire", "reducing_zone_void"],
+      "chemistry_phase": ["methanogenic", "stable"],
+      "decay_precursor": ["organic_reduction_microbial"],
+      "nucleation_sigma": 1.6,
+      "max_size_cm": 50,
+      "growth_rate_mult": 0.2,
+      "T_range_C": [10, 80],
+      "pH_optimum": [5, 9],
+      "redox_requirement": "reducing",
+      "required_ingredients": {"Cu": 1, "organic": 100},
+      "color_visual": "bright_copper_metallic_dendritic",
+      "description": "Native copper. In strongly reducing landfill pore waters, dissolved Cu(II) can reduce back to elemental Cu — direct analog of the supergene native copper of the Lake Superior copper district, but on the corpses of household wiring. Forms dendritic plates and wire-like growths in voids near corroding copper substrates. The extreme-reducing endpoint of the Cu chemistry-flip suite.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595 (anthropogenic native copper)"],
+      "evidence_level": "geological_analog"
+    },
+
+    "posnjakite": {
+      "formula": "Cu4(SO4)(OH)6·H2O",
+      "class": "sulfate",
+      "habit": "blue_prismatic",
+      "substrate_grows_on": ["copper_wire", "copper_pipe", "bronze"],
+      "chemistry_phase": ["acid", "methanogenic"],
+      "decay_precursor": ["drywall_sulfate", "battery_h2so4_diffuse"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 3,
+      "growth_rate_mult": 0.5,
+      "T_range_C": [5, 50],
+      "pH_optimum": [4, 7],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"Cu": 1, "SO4": 50, "O2": 0.3},
+      "color_visual": "cyan_blue_to_cobalt_prismatic",
+      "description": "Hydrated copper sulfate hydroxide. Cyan-blue prismatic crystals on copper substrates in mildly acidic, sulfate-bearing leachate. The blue-Cu phase that pairs with green malachite (carbonate) and atacamite (chloride) — sulfate version of the Cu efflorescence suite. Documented as a verdigris-class anthropogenic mineral on weathering bronze and copper artifacts.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595"],
+      "evidence_level": "anthropogenic_documented"
+    },
+
+    "cerussite": {
+      "formula": "PbCO3",
+      "class": "carbonate",
+      "habit": "pseudo_hexagonal_tabular",
+      "substrate_grows_on": ["lead_acid_battery", "lead_solder", "lead_paint_chip"],
+      "chemistry_phase": ["methanogenic", "alkaline_cap", "stable"],
+      "decay_precursor": ["organic_co2", "cement_calcite"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 20,
+      "growth_rate_mult": 0.3,
+      "T_range_C": [5, 50],
+      "pH_optimum": [7, 9],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"Pb": 0.5, "CO3": 50, "O2": 0.3},
+      "color_visual": "white_pseudo_hexagonal",
+      "description": "Lead carbonate. White pseudo-hexagonal tabular crystals; sometimes exhibits the cyclic-sextet twin habit that gives it a six-fold appearance from its orthorhombic structure. The carbonate-phase Pb mineral, mirroring anglesite (acid sulfate), pyromorphite (phosphate), and galena (sulfide reducing) — together they bracket the conditions under which lead-acid battery cores weather across all four major leachate phases.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595"],
+      "evidence_level": "anthropogenic_documented"
+    },
+
+    "galena": {
+      "formula": "PbS",
+      "class": "sulfide",
+      "habit": "cubic",
+      "substrate_grows_on": ["lead_acid_battery", "lead_solder", "leachate_collection_pipe"],
+      "chemistry_phase": ["methanogenic"],
+      "decay_precursor": ["drywall_sulfate_to_biogenic_h2s"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 3,
+      "growth_rate_mult": 0.5,
+      "T_range_C": [10, 50],
+      "pH_optimum": [6, 9],
+      "redox_requirement": "reducing",
+      "required_ingredients": {"Pb": 0.5, "S2": 0.5},
+      "color_visual": "silver_grey_metallic_cubic",
+      "description": "Lead sulfide. Forms cubic silver-grey metallic crystals where biogenic H2S (from sulfate-reducing bacteria on drywall sulfate) meets dissolved Pb from corroding battery casings or solder. The reducing-phase Pb mineral; chemistry parallel to biogenic galena documented in marine sediments and to galena in the Mississippi Valley-type sediment-hosted Pb-Zn deposits, but landfill-specific occurrence has not been reported in peer-reviewed literature.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595"],
+      "evidence_level": "chemistry_predicted"
+    },
+
+    "hydrozincite": {
+      "formula": "Zn5(CO3)2(OH)6",
+      "class": "carbonate",
+      "habit": "white_botryoidal_radial",
+      "substrate_grows_on": ["galvanized_steel", "zinc_metal"],
+      "chemistry_phase": ["methanogenic", "alkaline_cap"],
+      "decay_precursor": ["organic_co2", "cement_calcite"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 5,
+      "growth_rate_mult": 0.5,
+      "T_range_C": [5, 50],
+      "pH_optimum": [7, 10],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"Zn": 1, "CO3": 50, "O2": 0.3},
+      "color_visual": "white_botryoidal_chalky",
+      "description": "Hydrated basic zinc carbonate. White chalky botryoidal crusts on weathering galvanized steel under carbonate-rich, near-neutral-to-alkaline leachate. The carbonate-phase Zn mineral, mirroring goslarite (sulfate acid), simonkolleite (chloride neutral), and sphalerite (sulfide reducing). Often fluoresces pale blue under SW UV — the first hint of the UV-flashlight gameplay layer the receiving agent can build later.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595"],
+      "evidence_level": "anthropogenic_documented"
+    },
+
+    "sphalerite": {
+      "formula": "ZnS",
+      "class": "sulfide",
+      "habit": "tetrahedral_to_dodecahedral",
+      "substrate_grows_on": ["galvanized_steel", "zinc_metal", "e_waste_zn", "tire_pile_burn_residue"],
+      "chemistry_phase": ["methanogenic"],
+      "decay_precursor": ["drywall_sulfate_to_biogenic_h2s", "tire_pyrolysis_zns_char"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 3,
+      "growth_rate_mult": 0.5,
+      "T_range_C": [10, 50],
+      "pH_optimum": [6, 9],
+      "redox_requirement": "reducing",
+      "required_ingredients": {"Zn": 1, "S2": 0.5},
+      "color_visual": "amber_to_dark_brown_resinous_tetrahedral",
+      "description": "Zinc sulfide. Resinous-luster tetrahedra on Zn substrates where biogenic H2S meets dissolved Zn — directly observed in excavated landfill cores at Mont-Saint-Guibert (Garcia Lopez et al., Detritus 8) alongside Fe-Zn alloy fragments, and predicted in tire-pile burn-residue zones where pyrolysis already delivered ZnS-rich char. Color ranges from honey-amber (low-Fe) to dark brown (Fe-rich), depending on the locally available iron.",
+      "citations": ["Garcia Lopez et al. Detritus 8 (Mont-Saint-Guibert ELFM)", "Polymers 2023 review (tire pyrolysis ZnS-rich char)"],
+      "evidence_level": "landfill_specific"
+    },
+
+    "pyrite": {
+      "formula": "FeS2",
+      "class": "sulfide",
+      "habit": "framboidal_or_cubic",
+      "substrate_grows_on": ["rebar_corroded", "iron_substrate", "leachate_collection_pipe", "organic_slurry"],
+      "chemistry_phase": ["methanogenic", "stable"],
+      "decay_precursor": ["drywall_sulfate_to_biogenic_h2s", "rebar_iron", "organic_carbon_redox"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 3,
+      "growth_rate_mult": 0.3,
+      "T_range_C": [10, 50],
+      "pH_optimum": [6, 9],
+      "redox_requirement": "reducing",
+      "required_ingredients": {"Fe": 5, "S2": 0.5, "organic": 50},
+      "color_visual": "brass_yellow_metallic_or_framboidal_microcrystalline_raspberry_clusters",
+      "description": "Iron disulfide. Sulfate-reducing bacteria using drywall sulfate as electron acceptor and organic carbon as electron donor produce H2S; H2S meets dissolved Fe from corroding rebar and precipitates pyrite. In landfill conditions, expected to form the framboidal raspberry-cluster microcrystal habit canonical in marine and lacustrine sediments (Ohfuji & Rickard 2005, Wilkin & Barnes 1996). The specific framboidal texture has not yet been reported in a peer-reviewed landfill case study, so this entry is a chemistry-grounded prediction — but probably the modal mineral type in long-running methanogenic-phase cells with iron access.",
+      "citations": ["Ohfuji & Rickard 2005 (framboid mechanism)", "Wilkin & Barnes 1996"],
+      "evidence_level": "chemistry_predicted"
+    },
+
+    "goethite": {
+      "formula": "FeO(OH)",
+      "class": "oxide",
+      "habit": "botryoidal_radial_acicular",
+      "substrate_grows_on": ["rebar_corroded", "iron_substrate", "seep_face"],
+      "chemistry_phase": ["stable", "burn_zone", "burn_halo"],
+      "decay_precursor": ["rebar_iron_oxidation"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 30,
+      "growth_rate_mult": 0.5,
+      "T_range_C": [5, 80],
+      "pH_optimum": [3, 9],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"Fe": 5, "O2": 0.3},
+      "color_visual": "yellow_brown_to_orange_botryoidal",
+      "description": "Iron oxide-hydroxide. Yellow-brown to orange botryoidal crusts on rebar surfaces and at seep faces where reducing leachate hits oxidizing air; the ferrihydrite that initially precipitates ages to goethite and eventually hematite. The classic 'leachate orange' mineral every field surveyor has seen oozing from old fill, and a major component of MSWI bottom-ash weathering crusts (Saffarzadeh 2011).",
+      "citations": ["Saffarzadeh et al. 2011 Waste Manage doi:10.1016/j.wasman.2011.06.010"],
+      "evidence_level": "landfill_specific"
+    },
+
+    "jarosite": {
+      "formula": "KFe3(SO4)2(OH)6",
+      "class": "sulfate",
+      "habit": "pseudo_cubic_to_earthy",
+      "substrate_grows_on": ["rebar_corroded", "iron_substrate", "oxidizing_seep"],
+      "chemistry_phase": ["acid"],
+      "decay_precursor": ["drywall_sulfate", "rebar_iron", "biogenic_acid_oxidation"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 3,
+      "growth_rate_mult": 0.4,
+      "T_range_C": [5, 50],
+      "pH_optimum": [2, 4],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"K": 5, "Fe": 5, "SO4": 70, "O2": 0.3},
+      "color_visual": "ochre_yellow_to_brown_earthy",
+      "description": "Hydrated potassium iron(III) sulfate. Ochre-yellow earthy crusts on rebar and Fe substrates in low-pH sulfate-rich oxidizing conditions — the classic acid-mine-drainage analog mineral, here driven by drywall sulfate + rebar iron + acidogenic-phase pH. Often paired with goethite as iron oxidizes and pH rises. AMD-system documented (Jambor 2000, Hazen 2017 anthropogenic catalog).",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595", "Jambor et al. 2000 (mine-waste mineralogy)"],
+      "evidence_level": "anthropogenic_documented"
+    },
+
+    "native_silver": {
+      "formula": "Ag",
+      "class": "native",
+      "habit": "dendritic_or_wire",
+      "substrate_grows_on": ["pcb_solder_silver", "pcb_contact", "e_waste_void"],
+      "chemistry_phase": ["methanogenic"],
+      "decay_precursor": ["pcb_silver_dissolution_and_re_reduction"],
+      "nucleation_sigma": 1.6,
+      "max_size_cm": 10,
+      "growth_rate_mult": 0.2,
+      "T_range_C": [10, 50],
+      "pH_optimum": [6, 9],
+      "redox_requirement": "reducing",
+      "required_ingredients": {"Ag": 0.05, "organic": 100},
+      "color_visual": "tarnish_grey_to_bright_silver_dendritic",
+      "description": "Native silver. Strongly reducing pore water near decaying printed circuit boards can reduce dissolved Ag(I) to elemental Ag, which grows as dendritic plates and wire-like fingers in nearby voids. The e-waste reduction crown — same supergene mechanism that produced the famous Batopilas wire silver, but on the corpse of a smartphone motherboard. Tarnishes black on subsequent exposure to even trace H2S, so a silver dendrite in the methanogenic phase often blooms from bright to grey within decades.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595 (anthropogenic native silver)"],
+      "evidence_level": "geological_analog"
     }
 
   }

@@ -32,5 +32,22 @@
 //        TS types declared in 00-mineral-spec.ts; loader fetches at
 //        boot and assigns global MINERAL_SPEC. No engine yet — this
 //        is the bedrock that engine layers will read from.
+//
+//   v2 — catalog expansion + evidence-level refinement (2026-05-07):
+//        +12 minerals (covellite, cuprite, native_copper, posnjakite,
+//        cerussite, galena, hydrozincite, sphalerite, pyrite, goethite,
+//        jarosite, native_silver) — adds the sulfide and native
+//        classes and completes the chemistry-flip suite for Cu / Pb /
+//        Zn / Fe (each metal now has 3+ phases across acid /
+//        methanogenic / alkaline / burn windows). Schema bumped to 0.2.0:
+//        documented_in_landfills (binary) replaced by evidence_level
+//        (4-valued: landfill_specific | anthropogenic_documented |
+//        geological_analog | chemistry_predicted). All v1 entries
+//        re-evaluated under stricter evidence policy — several flipped
+//        from documented:true to anthropogenic_documented because
+//        Hazen 2017 catalog presence is not the same as a peer-reviewed
+//        landfill case study. Total catalog: 23 minerals. Distribution:
+//        7 landfill_specific, 9 anthropogenic_documented, 4 geological_analog,
+//        3 chemistry_predicted. Still text-only; no engine.
 
-const WASTELAND_VERSION = "v1";
+const WASTELAND_VERSION = "v2";

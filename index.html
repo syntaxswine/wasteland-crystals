@@ -75,7 +75,8 @@ async function _loadMineralSpec() {
         for (const cb of _specReadyCallbacks)
             cb();
         _specReadyCallbacks.length = 0;
-        console.info(`[spec] loaded ${Object.keys(file.minerals).length} minerals from data/minerals.json (schema ${file._schema_version}, ${file._audit_summary.documented_count} documented)`);
+        const ev = file._audit_summary.by_evidence_level;
+        console.info(`[spec] loaded ${Object.keys(file.minerals).length} minerals from data/minerals.json (schema ${file._schema_version}; ${ev.landfill_specific} landfill_specific / ${ev.anthropogenic_documented} anthropogenic / ${ev.geological_analog} analog / ${ev.chemistry_predicted} predicted)`);
     }
     catch (e) {
         console.warn(`[spec] data/minerals.json fetch failed: ${e instanceof Error ? e.message : e}. MINERAL_SPEC remains null.`);
@@ -121,7 +122,24 @@ _loadMineralSpec();
 //        TS types declared in 00-mineral-spec.ts; loader fetches at
 //        boot and assigns global MINERAL_SPEC. No engine yet — this
 //        is the bedrock that engine layers will read from.
-const WASTELAND_VERSION = "v1";
+//
+//   v2 — catalog expansion + evidence-level refinement (2026-05-07):
+//        +12 minerals (covellite, cuprite, native_copper, posnjakite,
+//        cerussite, galena, hydrozincite, sphalerite, pyrite, goethite,
+//        jarosite, native_silver) — adds the sulfide and native
+//        classes and completes the chemistry-flip suite for Cu / Pb /
+//        Zn / Fe (each metal now has 3+ phases across acid /
+//        methanogenic / alkaline / burn windows). Schema bumped to 0.2.0:
+//        documented_in_landfills (binary) replaced by evidence_level
+//        (4-valued: landfill_specific | anthropogenic_documented |
+//        geological_analog | chemistry_predicted). All v1 entries
+//        re-evaluated under stricter evidence policy — several flipped
+//        from documented:true to anthropogenic_documented because
+//        Hazen 2017 catalog presence is not the same as a peer-reviewed
+//        landfill case study. Total catalog: 23 minerals. Distribution:
+//        7 landfill_specific, 9 anthropogenic_documented, 4 geological_analog,
+//        3 chemistry_predicted. Still text-only; no engine.
+const WASTELAND_VERSION = "v2";
 
 // ── 99-renderer-cross-section.js ──
 
@@ -433,12 +451,16 @@ function svgStyle() {
         onSpecReady(function () {
           if (typeof MINERAL_SPEC !== "undefined" && MINERAL_SPEC !== null) {
             var names = Object.keys(MINERAL_SPEC);
-            var docCount = 0;
+            var counts = { landfill_specific: 0, anthropogenic_documented: 0, geological_analog: 0, chemistry_predicted: 0 };
             for (var i = 0; i < names.length; i++) {
-              if (MINERAL_SPEC[names[i]].documented_in_landfills) docCount++;
+              var lvl = MINERAL_SPEC[names[i]].evidence_level;
+              if (counts[lvl] !== undefined) counts[lvl]++;
             }
-            var msg = "[SPEC] " + names.length + " minerals loaded (" + docCount + " documented, " + (names.length - docCount) + " predicted)";
-            pre.textContent += "\n" + msg;
+            pre.textContent += "\n[SPEC] " + names.length + " minerals loaded";
+            pre.textContent += "\n[SPEC]   " + counts.landfill_specific + " landfill_specific (peer-reviewed landfill / LCS / MSWI)";
+            pre.textContent += "\n[SPEC]   " + counts.anthropogenic_documented + " anthropogenic_documented (Hazen 2017 catalog or similar)";
+            pre.textContent += "\n[SPEC]   " + counts.geological_analog + " geological_analog (supergene / AMD / biogenic-marine)";
+            pre.textContent += "\n[SPEC]   " + counts.chemistry_predicted + " chemistry_predicted (analog absent, chemistry sound)";
           }
         });
       }

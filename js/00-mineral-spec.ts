@@ -37,6 +37,12 @@ type MineralClass =
   | "native"
   | "mixed";
 
+type EvidenceLevel =
+  | "landfill_specific"
+  | "anthropogenic_documented"
+  | "geological_analog"
+  | "chemistry_predicted";
+
 interface MineralEntry {
   formula: string;
   class: MineralClass;
@@ -54,7 +60,7 @@ interface MineralEntry {
   color_visual: string;
   description: string;
   citations: string[];
-  documented_in_landfills: boolean;
+  evidence_level: EvidenceLevel;
 }
 
 interface MineralSpecFile {
@@ -67,8 +73,12 @@ interface MineralSpecFile {
     total_minerals: number;
     classes_covered: string[];
     classes_pending: string[];
-    documented_count: number;
-    predicted_count: number;
+    by_evidence_level: {
+      landfill_specific: number;
+      anthropogenic_documented: number;
+      geological_analog: number;
+      chemistry_predicted: number;
+    };
     _notes: string;
   };
   minerals: { [name: string]: MineralEntry };
@@ -92,7 +102,8 @@ async function _loadMineralSpec(): Promise<void> {
     MINERAL_SPEC_READY = true;
     for (const cb of _specReadyCallbacks) cb();
     _specReadyCallbacks.length = 0;
-    console.info(`[spec] loaded ${Object.keys(file.minerals).length} minerals from data/minerals.json (schema ${file._schema_version}, ${file._audit_summary.documented_count} documented)`);
+    const ev = file._audit_summary.by_evidence_level;
+    console.info(`[spec] loaded ${Object.keys(file.minerals).length} minerals from data/minerals.json (schema ${file._schema_version}; ${ev.landfill_specific} landfill_specific / ${ev.anthropogenic_documented} anthropogenic / ${ev.geological_analog} analog / ${ev.chemistry_predicted} predicted)`);
   } catch (e) {
     console.warn(`[spec] data/minerals.json fetch failed: ${e instanceof Error ? e.message : e}. MINERAL_SPEC remains null.`);
   }
