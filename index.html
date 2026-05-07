@@ -30,8 +30,13 @@
       display: block;
       background-color: #050a14;
       background-image: url('Style_Referance.png');
-      background-size: cover;
-      background-position: center;
+      /* Sized so the blueprint's two big white horizontal bars align with
+         the schematic's cell rim and cell floor. Bars sit at source y=213
+         and y=675 (462 px apart); cell pit spans 265.7 px in container; so
+         scale factor 0.575 → background-size 58%. Vertical offset -34px
+         shifts image top edge to land bars on cell rim/floor exactly. */
+      background-size: 58% auto;
+      background-position: center -34px;
       background-repeat: no-repeat;
     }
   </style>
