@@ -1,0 +1,160 @@
+{
+  "_schema_version": "0.1.0",
+  "_last_updated": "2026-05-07",
+  "_source_of_truth_for": ["index.html"],
+  "_source_of_truth_note": "Canonical scenario spec for Wasteland Crystals. Per the operative narrative frame (proposals/PROPOSAL-WASTELAND-CRYSTALS.md §'Update 2026-05-07: Operative narrative frame — mining operation'): the player is a future landfill miner working a cell, not an explorer or curator. Each scenario IS a real ELFM (Enhanced Landfill Mining) site characterization, with phase identifications drawn from peer-reviewed excavation papers wherever possible. The expected_species map links scenarios to mineral catalog entries via evidence_role, distinguishing what the cited paper actually observed from what the chemistry implies but the paper didn't name.",
+
+  "_schema": {
+    "id": "Slug matching the dictionary key.",
+    "name": "Display name. Lead with the locality — surveyor's voice.",
+    "site_class": "Site classification: municipal_landfill | mswi_bottom_ash_cell | mixed_msw_legacy | leachate_collection_biofilm | construction_demolition_pile.",
+    "location": "{country, region, locality} — populated for real sites, partial for archetypal.",
+    "operator_or_excavator": "Who pulled the cores or pipes. NEW-MINE consortium for the European ELFM corpus.",
+    "excavation_year": "Year the characterization study was performed (not when the cell was filled).",
+    "citations": "Primary characterization papers. Use the same short-form 'Author Year Journal Vol:Page' convention as minerals.json.",
+    "evidence_level": "Parallel to mineral catalog: landfill_specific (peer-reviewed characterization of this exact site) | program_synthesis (this site contributed to a multi-site review whose findings are reported jointly) | chemistry_archetype (no real-site characterization; the scenario is an archetypal recipe).",
+    "waste_age_years": "Approximate age of the waste at characterization time. Drives the dominant_phase default.",
+    "dominant_phase": "Leachate phase governing the cell at characterization time: acid (yrs 1-10) | methanogenic (decades) | stable (centuries) | alkaline_cap (cement-dominated) | burn_zone (post-incineration). Multiple lifts in a real cell live in different phases simultaneously; this is the reported governing phase for the characterization horizon.",
+    "substrate_inventory": "Array of substrate-token references (matching minerals.json substrate_grows_on tokens) with per-token note describing the documented relics at this site.",
+    "leachate_chemistry": "Characteristic ion concentrations for the dominant_phase. Values typical of the phase rather than direct measurement — only Pb/PO4/Cl/Zn/S2 are reported with site-specific pedigree where the citation supports it. Honest about evidence.",
+    "expected_species": "Map from mineral catalog ID to {evidence_role, note}. evidence_role: directly_observed (XRD/SEM identification in the cited paper) | implied_by_substrate_chemistry (the relics + leachate make the phase chemically necessary, but the paper does not name it) | predicted_from_program_synthesis (the phase appears in a related ELFM review covering this site without being named in a site-specific paper).",
+    "player_brief": "3-4 sentences in clinical-Borges register — the surveyor introducing the cell. No second-person addresses, no game framing; treat the brief as a corporate-quarterly-report intro paragraph for the working cell."
+  },
+
+  "_audit_summary": {
+    "total_scenarios": 2,
+    "by_site_class": {
+      "municipal_landfill": 2
+    },
+    "by_evidence_level": {
+      "landfill_specific": 1,
+      "program_synthesis": 1,
+      "chemistry_archetype": 0
+    },
+    "_notes": "v0.1.0 scenario spine. Two NEW-MINE European cells: Mont-Saint-Guibert (BE) at landfill_specific evidence (Garcia Lopez Detritus 8 — direct phase identifications), Halbenrain (AT) at program_synthesis (Hernandez Parrodi Processes 2021 — multi-site review). Together they exercise the schema's two evidence tiers honestly. Future additions slated: an MSWI bottom-ash cell (Saffarzadeh Waste Manage 2011) for the burn-zone chemistry; an LCS biofilm cell (Wilfert/Bennett-Fleming) for the vivianite/struvite scaling assemblage. Each documented landfill_specific mineral in minerals.json will eventually live in at least one scenario; the audit pass that ensures full coverage is deferred until the engine layer can actually consume these specs."
+  },
+
+  "scenarios": {
+
+    "mont_saint_guibert": {
+      "id": "mont_saint_guibert",
+      "name": "Mont-Saint-Guibert — NEW-MINE characterization cell",
+      "site_class": "municipal_landfill",
+      "location": {
+        "country": "Belgium",
+        "region": "Walloon Brabant",
+        "locality": "Mont-Saint-Guibert"
+      },
+      "operator_or_excavator": "NEW-MINE Marie Skłodowska-Curie ITN consortium",
+      "excavation_year": 2018,
+      "citations": [
+        "Garcia Lopez et al. Detritus 8 (Mont-Saint-Guibert ELFM, fines mineralogy)",
+        "Hernandez Parrodi et al. 2021 Processes 9:394 doi:10.3390/pr9020394 (NEW-MINE synthesis)"
+      ],
+      "evidence_level": "landfill_specific",
+      "waste_age_years": 30,
+      "dominant_phase": "stable",
+      "substrate_inventory": [
+        {"token": "lead_acid_battery", "note": "Metallic Pb fragments identified by Garcia Lopez et al. as relics of corroded battery plates. Anchors the Pb chemistry."},
+        {"token": "galvanized_steel", "note": "Fe-Zn alloy fragments identified in the <4.5 mm fines. Substrate for both sphalerite (reducing) and the Zn-sulfate weathering products (oxidizing)."},
+        {"token": "lead_solder", "note": "PCB and electrical fittings, implied by the ELFM-program inventory rather than site-specific call-out. Contributes to the diffuse Pb pool."},
+        {"token": "organic_slurry", "note": "Decomposed food + paper providing PO4 (food/bone-derived), CO2, and the reducing potential the methanogenic phase has been running on for two decades."},
+        {"token": "concrete_demolition", "note": "Mixed C&D rubble in the lower lifts; supplies Ca for the late phosphate/chloride convergence."}
+      ],
+      "leachate_chemistry": {
+        "pH": 7.6,
+        "T_C": 35,
+        "redox": "weakly_reducing_to_neutral",
+        "ions_mg_per_L": {
+          "Pb": 1.0,
+          "PO4": 8,
+          "Cl": 200,
+          "Zn": 5,
+          "S2": 0.5,
+          "SO4": 30,
+          "Ca": 400
+        },
+        "_note": "Phase-typical concentrations consistent with the documented phase suite. Garcia Lopez reports phase identification via SEM-EDS; bulk leachate ion measurements are not the focus of that paper. Treat the values as 'consistent with the observed mineralogy' rather than direct field measurements."
+      },
+      "expected_species": {
+        "pyromorphite": {
+          "evidence_role": "directly_observed",
+          "note": "Pb-Ca phosphate (pyromorphite-group, Pb5(PO4)3Cl) directly identified in <4.5 mm fines by Garcia Lopez SEM-EDS. The most diagnostic Mont-Saint-Guibert phase — the four-way convergence of Pb (battery), PO4 (organic), Cl (PVC decay), and stable late-phase chemistry was the reason this site became the Pb-chemistry reference cell."
+        },
+        "sphalerite": {
+          "evidence_role": "directly_observed",
+          "note": "ZnS coatings on Fe-Zn alloy substrate, identified in the same fines fraction. Biogenic H2S from sulfate-reducer activity in the methanogenic phase met dissolved Zn from corroding galvanizing."
+        },
+        "anglesite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "Garcia Lopez reports metallic Pb relics and acidic-then-neutralized weathering, but does not name anglesite specifically. Anglesite is the obligate sulfate weathering product of metallic Pb under acidic SO4-bearing leachate; its presence is chemically necessary if the cell ever passed through an acidic phase, which the methanogenic transition implies."
+        },
+        "calcite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "Late-stage Ca-CO3 from the C&D fraction neutralizing residual acid and capping the late paragenesis. Documented broadly in mature MSW cells (Bennett/Fleming clogging review); likely present at Mont-Saint-Guibert by chemistry, not named in the cited fines paper."
+        }
+      },
+      "player_brief": "Mont-Saint-Guibert cell, Walloon Brabant. Closed 2008, excavated by NEW-MINE in 2018 to characterize the <4.5 mm fines fraction. The cell is the Pb/Zn reference standard for the European ELFM corpus: olive-green pyromorphite hexagonal prisms on lead-acid battery relics, amber sphalerite tetrahedra on Fe-Zn alloy fragments, the four-way Pb-PO4-Cl-Ca convergence reading as deliberately engineered though it accumulated by accident over thirty years of methanogenic stability. Garcia Lopez SEM-EDS catalog is the working ground truth."
+    },
+
+    "halbenrain": {
+      "id": "halbenrain",
+      "name": "Halbenrain — NEW-MINE confirmation cell",
+      "site_class": "municipal_landfill",
+      "location": {
+        "country": "Austria",
+        "region": "Styria",
+        "locality": "Halbenrain"
+      },
+      "operator_or_excavator": "NEW-MINE Marie Skłodowska-Curie ITN consortium",
+      "excavation_year": 2019,
+      "citations": [
+        "Hernandez Parrodi et al. 2021 Processes 9:394 doi:10.3390/pr9020394 (NEW-MINE synthesis covering Halbenrain)"
+      ],
+      "evidence_level": "program_synthesis",
+      "waste_age_years": 25,
+      "dominant_phase": "methanogenic",
+      "substrate_inventory": [
+        {"token": "lead_acid_battery", "note": "Battery relics inferred from the NEW-MINE program inventory — typical European municipal cell composition. Halbenrain-specific phase characterization at this granularity is not separately published."},
+        {"token": "galvanized_steel", "note": "Galvanized fines reported in the program-level review. Chemistry parallels Mont-Saint-Guibert's substrate set."},
+        {"token": "organic_slurry", "note": "Food and paper waste supplying PO4 and the reducing potential for a still-active methanogenic phase."},
+        {"token": "concrete_demolition", "note": "Mixed C&D rubble providing Ca and pH-buffering for late carbonate phases."}
+      ],
+      "leachate_chemistry": {
+        "pH": 7.2,
+        "T_C": 32,
+        "redox": "reducing",
+        "ions_mg_per_L": {
+          "Pb": 0.6,
+          "PO4": 6,
+          "Cl": 150,
+          "Zn": 4,
+          "S2": 0.8,
+          "SO4": 50,
+          "Ca": 350
+        },
+        "_note": "Methanogenic-phase typical values; Halbenrain-specific bulk leachate measurements are not the focus of the program-synthesis paper. Values picked to be consistent with the documented Mont-Saint-Guibert suite while sitting earlier in the paragenetic sequence (more S2 still active, less stable-phase Pb-Ca-Cl convergence yet)."
+      },
+      "expected_species": {
+        "sphalerite": {
+          "evidence_role": "predicted_from_program_synthesis",
+          "note": "ZnS expected on the same chemical grounds as Mont-Saint-Guibert — galvanized fines + biogenic sulfide. Hernandez Parrodi 2021 covers both cells under one program; site-specific phase reports for Halbenrain at the granularity of Garcia Lopez's Mont-Saint-Guibert SEM-EDS work are not separately published."
+        },
+        "pyromorphite": {
+          "evidence_role": "predicted_from_program_synthesis",
+          "note": "Pb-Ca phosphate predicted by the same four-way convergence. The cell is two phase-shifts younger than Mont-Saint-Guibert; the prediction is that pyromorphite is forming but has not yet reached the stable-phase grain sizes Garcia Lopez reported at Mont-Saint-Guibert."
+        },
+        "vivianite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "Fe2+ + PO4 in the active methanogenic phase predicts vivianite scaling on rebar fragments and in the leachate-collection assemblage. Documented in landfill leachate scaling generally (Wilfert 2021 Water Research); chemistry strongly favors it for Halbenrain's phase window."
+        },
+        "anglesite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "Same chemical-necessity argument as Mont-Saint-Guibert — relict acidic-phase weathering of battery Pb under SO4-bearing leachate."
+        }
+      },
+      "player_brief": "Halbenrain cell, Styria. NEW-MINE confirmation excavation in the same program lineage as Mont-Saint-Guibert, characterized at program-synthesis granularity rather than site-specific SEM-EDS. The cell sits two phase-shifts earlier than Mont-Saint-Guibert: still actively methanogenic, sulfide chemistry still running, late-phase pyromorphite seed crystals forming but not yet at the grain sizes the Belgian fines paper reported. Read the cell as a paragenesis-in-progress rather than a closed system."
+    }
+
+  }
+}

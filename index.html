@@ -112,6 +112,58 @@ async function _loadMineralSpec() {
 // available in script-mode TS, so we fire-and-forget.
 _loadMineralSpec();
 
+// ── 01-scenario-spec.js ──
+
+// ============================================================
+// js/01-scenario-spec.ts — ELFM scenario spec types + loader
+// ============================================================
+//
+// Type declarations for the scenario catalog at data/scenarios.json. Parallel
+// in shape to 00-mineral-spec.ts: the JSON file is the source of truth, this
+// file just gives TypeScript names to the spec so engine code (when it lands)
+// can be statically checked.
+//
+// A scenario is a real-world ELFM site characterization — the cell that the
+// player is "working today" per the operative narrative frame
+// (proposals/PROPOSAL-WASTELAND-CRYSTALS.md §'Update 2026-05-07'). The schema
+// is structured around the evidence pedigree of the data: what the cited
+// excavation paper directly observed vs. what the chemistry implies vs. what
+// a multi-site program synthesis covers without site-specific granularity.
+//
+// Loader: at boot, fetch data/scenarios.json and assign the .scenarios dict
+// to the global SCENARIO_SPEC. Until the fetch resolves, SCENARIO_SPEC is
+// null. Code that needs the spec should await onScenarioSpecReady() or check
+// SCENARIO_SPEC_READY.
+let SCENARIO_SPEC = null;
+let SCENARIO_SPEC_READY = false;
+const _scenarioReadyCallbacks = [];
+function onScenarioSpecReady(cb) {
+    if (SCENARIO_SPEC_READY)
+        cb();
+    else
+        _scenarioReadyCallbacks.push(cb);
+}
+async function _loadScenarioSpec() {
+    try {
+        const resp = await fetch("data/scenarios.json");
+        if (!resp.ok)
+            throw new Error(`HTTP ${resp.status}`);
+        const file = (await resp.json());
+        SCENARIO_SPEC = file.scenarios;
+        SCENARIO_SPEC_READY = true;
+        for (const cb of _scenarioReadyCallbacks)
+            cb();
+        _scenarioReadyCallbacks.length = 0;
+        const ev = file._audit_summary.by_evidence_level;
+        const evLine = `${ev.landfill_specific ?? 0} landfill_specific / ${ev.program_synthesis ?? 0} program_synthesis / ${ev.chemistry_archetype ?? 0} archetype`;
+        console.info(`[scenarios] loaded ${Object.keys(file.scenarios).length} scenarios from data/scenarios.json (schema ${file._schema_version}; ${evLine})`);
+    }
+    catch (e) {
+        console.warn(`[scenarios] data/scenarios.json fetch failed: ${e instanceof Error ? e.message : e}. SCENARIO_SPEC remains null.`);
+    }
+}
+_loadScenarioSpec();
+
 // ── 15-version.js ──
 
 // ============================================================
@@ -165,7 +217,26 @@ _loadMineralSpec();
 //        landfill case study. Total catalog: 23 minerals. Distribution:
 //        7 landfill_specific, 9 anthropogenic_documented, 4 geological_analog,
 //        3 chemistry_predicted. Still text-only; no engine.
-const WASTELAND_VERSION = "v2";
+//
+//   v3 — scenario spine (2026-05-07): canonical ELFM scenario catalog at
+//        data/scenarios.json. Two NEW-MINE European cells anchor the
+//        opening set: Mont-Saint-Guibert (BE) at landfill_specific
+//        evidence (Garcia Lopez Detritus 8 — direct SEM-EDS phase
+//        identifications: pyromorphite + sphalerite + metallic Pb +
+//        Fe-Zn alloy in <4.5 mm fines), and Halbenrain (AT) at
+//        program_synthesis evidence (Hernandez Parrodi Processes 2021
+//        — multi-site review). Each scenario carries site metadata,
+//        substrate inventory, characteristic leachate chemistry, and
+//        an expected_species map keying mineral catalog entries to a
+//        per-scenario evidence_role (directly_observed |
+//        implied_by_substrate_chemistry | predicted_from_program_synthesis).
+//        Schema fields documented inline; loader fetches at boot and
+//        assigns global SCENARIO_SPEC. Scenarios are the cells the
+//        future-landfill-miner is working today (per proposal §
+//        'Update 2026-05-07: Operative narrative frame'). Still no
+//        engine — this is the second bedrock layer (after v1/v2's
+//        mineral spine) the engine layers will read from.
+const WASTELAND_VERSION = "v3";
 
 // ── 99-renderer-cross-section.js ──
 
@@ -535,6 +606,29 @@ function svgStyle() {
             pre.textContent += "\n[SPEC]   " + counts.anthropogenic_documented + " anthropogenic_documented (Hazen 2017 catalog or similar)";
             pre.textContent += "\n[SPEC]   " + counts.geological_analog + " geological_analog (supergene / AMD / biogenic-marine)";
             pre.textContent += "\n[SPEC]   " + counts.chemistry_predicted + " chemistry_predicted (analog absent, chemistry sound)";
+          }
+        });
+      }
+
+      if (typeof onScenarioSpecReady === "function") {
+        onScenarioSpecReady(function () {
+          if (typeof SCENARIO_SPEC !== "undefined" && SCENARIO_SPEC !== null) {
+            var ids = Object.keys(SCENARIO_SPEC);
+            pre.textContent += "\n[CELL] " + ids.length + " scenarios loaded";
+            for (var i = 0; i < ids.length; i++) {
+              var s = SCENARIO_SPEC[ids[i]];
+              var loc = s.location.locality + ", " + s.location.country;
+              var nObs = 0, nImp = 0, nPred = 0;
+              var keys = Object.keys(s.expected_species);
+              for (var j = 0; j < keys.length; j++) {
+                var role = s.expected_species[keys[j]].evidence_role;
+                if (role === "directly_observed") nObs++;
+                else if (role === "implied_by_substrate_chemistry") nImp++;
+                else if (role === "predicted_from_program_synthesis") nPred++;
+              }
+              pre.textContent += "\n[CELL]   " + s.id + " — " + loc + " (" + s.dominant_phase + ", " + s.evidence_level + ")";
+              pre.textContent += "\n[CELL]     " + keys.length + " expected species: " + nObs + " observed / " + nImp + " implied / " + nPred + " predicted";
+            }
           }
         });
       }
