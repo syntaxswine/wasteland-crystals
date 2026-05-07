@@ -30,17 +30,26 @@
       display: block;
       background-color: #050a14;
       background-image: url('Style_Referance.png');
-      /* Sized so the blueprint's two big white horizontal bars align with
-         the schematic's cell rim and cell floor. Bars sit at source y=213
-         and y=675 (462 px apart); cell pit spans 265.7 px in container; so
-         scale factor 0.575 → background-size 58%. Vertical offset -34px
-         shifts image top edge to land bars on cell rim/floor exactly.
-         Horizontal offset 236px (43px left of center) lands the building
-         that sits at source x=669 directly above the leachate-pump
-         centerline (the sump-pipe vertical with the big sump rect at the
-         bottom). */
+      /* Responsive alignment of the blueprint backdrop:
+         - background-size: 58% auto    matches the bar-to-bar source
+                                        distance (462 px) to the cell-pit
+                                        height (53.6% of viewBox) so the
+                                        white horizontal bars land on the
+                                        cell rim and cell floor.
+         - background-position-x: 42.4% lands the building at source x=669
+                                        directly above the leachate-pump
+                                        centerline (sump pipe at viewBox
+                                        x=700, container x = 0.467 × w).
+         - background-position-y: 188%  shifts image top to image_top =
+                                        -0.0252 × w so the top bar lands
+                                        on the cell rim. Background-
+                                        position percentages can exceed
+                                        100% for fine-tuning past natural
+                                        overflow alignment.
+         All three values are container-width-relative, so the alignment
+         tracks the SVG's responsive scaling at any viewport. */
       background-size: 58% auto;
-      background-position: 236px -34px;
+      background-position: 42.4% 188%;
       background-repeat: no-repeat;
     }
   </style>
