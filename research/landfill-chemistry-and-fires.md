@@ -44,7 +44,43 @@ Real flow is two-domain (Fellner & Brunner 2010): **channels** (Ks ≈ 300 m/d, 
 
 **Crystal nucleation should concentrate at channel walls and channel-matrix interfaces** — direct analog of fracture-controlled mineralization in real rocks — with dry matrix pockets staying barren. Built-in spatial heterogeneity, no procedural noise needed.
 
-### 1.4 Composition: invert pixel-weighting from mass-weighting
+### 1.4 Physical sorting, fabric, and literal vugs
+
+(Design framing layered on top of the research threads, contributed 2026-05-07. Grounded in sedimentary-petrology principles applied to MSW geomechanics — Sowers 1973 settlement model, Sharma & Reddy *Geoenvironmental Engineering*, Bareither et al. on waste mechanics — but the synthesis here is design framing, not direct literature finding.)
+
+Garbage doesn't pile uniformly. Compactor wheels + differential settlement act like fluvial sorting:
+
+- **Dense items** (batteries, concrete chunks, metal) sink within each lift during compaction; fluffy material fills voids around them.
+- **Coarse rigid clasts** (appliances, tires, C&D rubble) form a **clast-supported framework** with high inter-clast permeability. These define where the channels (§1.3) physically come from.
+- **Fine matrix** (food pulp, soil cover, soggy paper, plastic film) is **matrix-supported fabric** with low permeability, holding liquid against gravity.
+
+This is the same clast-supported / matrix-supported distinction from sedimentary petrology, applied to MSW.
+
+**Drainage falls out of fabric.** Coarse zones flush fast → channel-wall mineralization. Fine matrix zones have long residence time → diffusion-dominated, evolved-leachate chemistry, evaporite-style efflorescences when they dry. The spatial chemistry zoning isn't a separate axis from physical sorting — it's a direct consequence of it.
+
+**Rigid items make literal vugs.** Refrigerators, washing machines, car bodies, computer chassis, TV cabinets, water heaters — anything with rigid walls and internal volume — don't compact. They create permanent interior voids that survive burial. **A buried refrigerator IS a vug in the strict mineralogical sense:** an open cavity in surrounding "rock," with internal surfaces available for free-faced crystal growth.
+
+This is the engine port at its most direct: vugg-simulator's geological vug → wasteland's appliance interior. Same crystal-growth-into-open-space mechanic, same competing-nucleation-and-habit logic, just with a sheet-metal substrate instead of host limestone. The game's name becomes literally accurate, not metaphorical.
+
+**Implementation implication:** the very first proof-of-concept zone should be crystals nucleating into the interior of a single buried appliance. That exercises the engine port in its most direct form before any of the more exotic chemistry layers are added.
+
+**Specific item behaviors:**
+
+| Item type | Mechanical behavior | Chemistry/spatial role |
+|---|---|---|
+| Appliances (rigid hollow chassis) | Don't compact; create permanent interior voids | **Literal vugs** — primary crystal-growth space |
+| Tires | Springy clast network, predictable void structure | Channels + ZnS source if burned |
+| C&D rubble (concrete, brick) | Rigid coarse clasts | Coarse permeable drainage; alkaline substrate |
+| Paper/cardboard | Soggy matrix wet, fragile dry | Matrix-supported low-flow zones |
+| Food waste | Decays in ~5–30 yr | **Generates new voids over time** as it disappears |
+| Mattresses | Compress then partially recover | Lenticular springy zones |
+| Metal cans | Crush laminar | Flat-fabric layers |
+| Plastic film | Ductile, fills voids | Matrix component AND in-place polymer-decay precursor |
+| Batteries, dense electronics | Sink in compaction | Point-source chemistry hotspots |
+
+**Void evolution over time.** Food waste decay (5–30 yr) is geologically analogous to evaporite/limestone dissolution leaving karst cavities — but on a decadal not millennial timescale. The playfield isn't static; it actively **develops new crystal-growth real estate as organics decompose**. By the methanogenic phase, the cell has substantially more void space than at burial.
+
+### 1.5 Composition: invert pixel-weighting from mass-weighting
 
 C&D debris is 600 Mt/yr in the US (2× MSW), and **73% of it is concrete + asphalt** — that's the dominant Ca/Si/Al/S substrate hosting the entire alkaline-sulfate-iron paragenesis (portlandite Ca(OH)₂ → ettringite → C-S-H, plus gypsum from drywall, Fe oxides from rebar). MSW chemistry is driven by 63% organics (food/yard/paper/wood) producing the anoxic methanogenic fatty-acid leachate that mobilizes everything else.
 
@@ -52,7 +88,7 @@ But **e-waste + household hazardous waste — <5% by mass — are the only sourc
 
 **Design implication:** lots of pixels per gram of e-waste, very few per ton of drywall. The inventory system should weight visual/gameplay presence inversely to mass abundance.
 
-### 1.5 Burn zones invert the chemistry — same element, different mineral
+### 1.6 Burn zones invert the chemistry — same element, different mineral
 
 Subsurface smoldering is well-documented and persistent. **Bridgeton landfill (Missouri) has been smoldering since 2010** at >150°C through 22 Mt of waste at >150 ft depth, near radioactive material at the adjacent West Lake site.
 
@@ -77,7 +113,7 @@ Subsurface smoldering is well-documented and persistent. **Bridgeton landfill (M
 
 **Design implication:** the burn-zone mechanic doesn't change *which* elements are present, it changes *which crystals grow from them*. Same input, different output, gated by local thermal history. This is a clean structural mechanic.
 
-### 1.6 Polymer-decay-cascade additions
+### 1.7 Polymer-decay-cascade additions
 
 Original cascade (sketched in proposal): PVC → HCl → chloride seconds; celluloid/acrylic → nitric/organic acids; PE/PP slow oxidation → wider metal mobilization; cement → late-stage carbonate cap.
 
@@ -87,7 +123,7 @@ Additions from this research:
 - **Tires**: chemically distinctive S/Zn fraction, capable of producing synthetic-sphalerite zones if burned, oily-char zones if not.
 - **Bioreactor mode**: leachate recirculation compresses the acid→methanogenic transition from ~10 yr to ~2–4 yr. Candidate for a "fast time" cell archetype in-game.
 
-### 1.7 Three-paper foundation for further reading
+### 1.8 Three-paper foundation for further reading
 
 The receiving agent should anchor on:
 
@@ -97,7 +133,7 @@ The receiving agent should anchor on:
 
 Plus **Baldé et al. 2024 Global E-waste Monitor** for e-waste composition.
 
-### 1.8 Open gaps (not researched in this pass)
+### 1.9 Open gaps (not researched in this pass)
 
 - **Geomechanics**: how differential settlement over decades creates new cracks that redistribute flow paths. Could become a dynamic mechanic where the playfield's plumbing reorganizes over time.
 - **Microbial vertical zonation**: the leachate report covered sulfate-reducer sulfide precipitation, but didn't enumerate the full redox stack (aerobes near surface → denitrifiers → Fe/Mn reducers → sulfate reducers → methanogens, vertically zoned by O₂ availability) that should structure crystal-growth zones in a more mechanistic way.
