@@ -359,36 +359,79 @@ function buildSchematicSVG(cfg) {
         parts.push(`<line class="scale-tick" x1="${X(-padLeftM + 2)}" y1="${Y(tickYM)}" x2="${X(-padLeftM + 5)}" y2="${Y(tickYM)}" />`);
         parts.push(`<text class="scale-label" x="${X(-padLeftM + 0)}" y="${Y(tickYM) + 3}">${d}m</text>`);
     }
-    // ── Layer labels on the right with leader lines ──
-    let cursor2 = 0;
-    for (const layer of cfg.upperLayers) {
-        if (layer.showLabel) {
-            const yMid = cellTopYM + cursor2 + layer.thicknessM / 2;
-            const labelXM = cellRightXTopM + 1;
-            parts.push(`<line class="leader" x1="${X(labelXM)}" y1="${Y(yMid)}" x2="${X(labelXM + 2)}" y2="${Y(yMid)}" />`);
-            parts.push(`<text class="layer-label" x="${X(labelXM + 2.5)}" y="${Y(yMid) + 3}">${layer.name}</text>`);
+    // ── Layer labels on the right with bent-leader lines ──
+    // Cap and base-liner layers are 0.4–0.6 m thick (4–6 px in viewBox) — narrower
+    // than the label's own line height (~12 px). Anchoring each label at its layer
+    // mid stacks them on top of each other. Mining-report drafting practice handles
+    // this with a fan: labels spread vertically with constant line-height, leaders
+    // bend from layer-mid to label-mid. Group is recentered on the natural centroid
+    // so the fan reads as a balanced annotation rather than a downward spill.
+    const labelXM = cellRightXTopM + 1;
+    const stubXM = labelXM + 0.5;
+    const labelStartXM = labelXM + 2;
+    const LABEL_LINE_PX = 12;
+    const fanLabels = (items) => {
+        if (items.length === 0)
+            return items;
+        // Forward pass: enforce min vertical separation (push down on collision).
+        for (let i = 1; i < items.length; i++) {
+            const minY = items[i - 1].yLabelPx + LABEL_LINE_PX;
+            if (items[i].yLabelPx < minY)
+                items[i].yLabelPx = minY;
         }
-        cursor2 += layer.thicknessM;
-    }
-    // Lift band label
+        // Recenter: if the forward pass shifted the group's centroid downward,
+        // shift the whole fan back up by that drift so it brackets the natural
+        // centroid (cleaner read than a one-sided downward cascade).
+        const naturalCentroid = items.reduce((s, it) => s + Y(it.yMidM), 0) / items.length;
+        const newCentroid = items.reduce((s, it) => s + it.yLabelPx, 0) / items.length;
+        const shift = newCentroid - naturalCentroid;
+        if (shift > 0)
+            for (const it of items)
+                it.yLabelPx -= shift;
+        return items;
+    };
+    const renderFan = (items) => {
+        for (const it of items) {
+            const yMidPx = Y(it.yMidM);
+            // 4-segment bent leader: rim → stub → vertical bend → label-base
+            parts.push(`<polyline class="leader" points="${X(cellRightXTopM)},${yMidPx} ${X(stubXM)},${yMidPx} ${X(stubXM)},${it.yLabelPx} ${X(labelStartXM)},${it.yLabelPx}" />`);
+            parts.push(`<text class="layer-label" x="${X(labelStartXM + 0.5)}" y="${it.yLabelPx + 3}">${it.name}</text>`);
+            if (it.sublabel) {
+                parts.push(`<text class="layer-sublabel" x="${X(labelStartXM + 0.5)}" y="${it.yLabelPx + 14}">${it.sublabel}</text>`);
+            }
+        }
+    };
+    // Upper-layer fan
+    const upperFan = [];
     {
-        const yMid = cellTopYM + liftBandTopM + liftBandHeightM / 2;
-        const labelXM = cellRightXTopM + 1;
-        parts.push(`<line class="leader" x1="${X(labelXM)}" y1="${Y(yMid)}" x2="${X(labelXM + 2)}" y2="${Y(yMid)}" />`);
-        parts.push(`<text class="layer-label" x="${X(labelXM + 2.5)}" y="${Y(yMid) + 3}">WASTE BODY</text>`);
-        parts.push(`<text class="layer-sublabel" x="${X(labelXM + 2.5)}" y="${Y(yMid) + 14}">${cfg.lifts.length} LIFTS, ${perLiftM.toFixed(1)} M EACH</text>`);
-    }
-    // Lower layers
-    cursor2 = liftBandBotM;
-    for (const layer of cfg.lowerLayers) {
-        if (layer.showLabel) {
-            const yMid = cellTopYM + cursor2 + layer.thicknessM / 2;
-            const labelXM = cellRightXTopM + 1;
-            parts.push(`<line class="leader" x1="${X(labelXM)}" y1="${Y(yMid)}" x2="${X(labelXM + 2)}" y2="${Y(yMid)}" />`);
-            parts.push(`<text class="layer-label" x="${X(labelXM + 2.5)}" y="${Y(yMid) + 3}">${layer.name}</text>`);
+        let c = 0;
+        for (const layer of cfg.upperLayers) {
+            if (layer.showLabel) {
+                const yMidM = cellTopYM + c + layer.thicknessM / 2;
+                upperFan.push({ yMidM, yLabelPx: Y(yMidM), name: layer.name });
+            }
+            c += layer.thicknessM;
         }
-        cursor2 += layer.thicknessM;
     }
+    renderFan(fanLabels(upperFan));
+    // Lift band label (single, never collides with anything)
+    {
+        const yMidM = cellTopYM + liftBandTopM + liftBandHeightM / 2;
+        renderFan([{ yMidM, yLabelPx: Y(yMidM), name: "WASTE BODY", sublabel: `${cfg.lifts.length} LIFTS, ${perLiftM.toFixed(1)} M EACH` }]);
+    }
+    // Lower-layer fan
+    const lowerFan = [];
+    {
+        let c = liftBandBotM;
+        for (const layer of cfg.lowerLayers) {
+            if (layer.showLabel) {
+                const yMidM = cellTopYM + c + layer.thicknessM / 2;
+                lowerFan.push({ yMidM, yLabelPx: Y(yMidM), name: layer.name });
+            }
+            c += layer.thicknessM;
+        }
+    }
+    renderFan(fanLabels(lowerFan));
     // ── Title block in upper-left ──
     parts.push(`<g class="title-block" transform="translate(${X(-padLeftM + 2)}, ${Y(-padTopM + 1)})">`);
     parts.push(`  <text class="title">WASTELAND CRYSTALS</text>`);
@@ -445,7 +488,7 @@ function svgStyle() {
     .scale-label { fill: #d4af37; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 9px; }
 
     /* Layer leader labels */
-    .leader        { stroke: #8a6f24; stroke-width: 0.8; }
+    .leader        { stroke: #8a6f24; stroke-width: 0.8; fill: none; }
     .layer-label   { fill: #d4af37; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 10px; letter-spacing: 0.08em; }
     .layer-sublabel{ fill: #b48a2c; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 8px; letter-spacing: 0.05em; }
 
