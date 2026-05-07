@@ -19,6 +19,7 @@
     "leachate_chemistry": "Characteristic ion concentrations for the dominant_phase. Values typical of the phase rather than direct measurement — only Pb/PO4/Cl/Zn/S2 are reported with site-specific pedigree where the citation supports it. Honest about evidence.",
     "expected_species": "Map from mineral catalog ID to {evidence_role, note}. evidence_role: directly_observed (XRD/SEM identification in the cited paper) | implied_by_substrate_chemistry (the relics + leachate make the phase chemically necessary, but the paper does not name it) | predicted_from_program_synthesis (the phase appears in a related ELFM review covering this site without being named in a site-specific paper).",
     "active_zones": "Subset of zone IDs (from data/zones.json) currently dominant or running active chemistry at this scenario's snapshot. The renderer tints only these in the schematic. NOTE: this is a current-chemistry filter, not a crystal-presence filter — crystals nucleated in any historically-active zone persist even after the zone has waned, so the crystal-dot generator places dots based on the mineral's expected zones in zones.json regardless of active_zones state. The two systems are complementary: active_zones = current chemistry territory; crystal dots = accumulated paragenesis since cell closure.",
+    "items_in_cell": "Map from item_class_id (data/item_classes.json) to representative count of that item type in the cell. Counts are RENDER counts — a few-dozen visible items per cell, not the actual million-plus item count of a real landfill. Procedurally placed by js/07-cell-population.ts with a deterministic seed (scenario.id + class_id + item_index). Per the boss's 2026-05-07 framing: 'track what garbage is where before it breaks down.' Items pre-exist chemistry; their substrate tokens contribute to local chemistry and (in future passes) gate which crystals nucleate where.",
     "player_brief": "3-4 sentences in clinical-Borges register — the surveyor introducing the cell. No second-person addresses, no game framing; treat the brief as a corporate-quarterly-report intro paragraph for the working cell."
   },
 
@@ -68,6 +69,21 @@
         {"token": "copper_wiring", "evidence_basis": "implied_typical_msw", "note": "PCB scrap, motor stators, electrical fittings — standard E-bearing MSW components. Not specifically catalogued at MSG but their presence is implied by the cell type."},
         {"token": "rebar_steel_scrap", "evidence_basis": "implied_typical_msw", "note": "Reinforcement bar from the C&D rubble fraction plus white-goods scrap. Source of the Fe²⁺ that drives any vivianite or pyrite chemistry the cell hosts."}
       ],
+      "items_in_cell": {
+        "refrigerator": 3,
+        "washing_machine": 2,
+        "car_body": 1,
+        "water_heater": 1,
+        "tv_cabinet": 4,
+        "tire": 4,
+        "lead_acid_battery": 5,
+        "drywall_sheet": 6,
+        "concrete_chunk": 9,
+        "pvc_pipe_section": 4,
+        "copper_wire_bundle": 6,
+        "rebar_bundle": 3,
+        "organic_matrix": 1
+      },
       "leachate_chemistry": {
         "pH": 7.6,
         "T_C": 35,
@@ -133,6 +149,21 @@
         {"token": "copper_wiring", "evidence_basis": "implied_typical_msw", "note": "Standard E-bearing MSW component. Same evidence basis as drywall and PVC — typical of cell composition rather than directly characterized at this site."},
         {"token": "rebar_steel_scrap", "evidence_basis": "implied_typical_msw", "note": "Standard C&D-rubble component. Source of Fe²⁺ for the active methanogenic phase's vivianite-favorable chemistry."}
       ],
+      "items_in_cell": {
+        "refrigerator": 2,
+        "washing_machine": 2,
+        "car_body": 1,
+        "water_heater": 2,
+        "tv_cabinet": 3,
+        "tire": 5,
+        "lead_acid_battery": 4,
+        "drywall_sheet": 5,
+        "concrete_chunk": 7,
+        "pvc_pipe_section": 5,
+        "copper_wire_bundle": 7,
+        "rebar_bundle": 3,
+        "organic_matrix": 1
+      },
       "leachate_chemistry": {
         "pH": 7.2,
         "T_C": 32,

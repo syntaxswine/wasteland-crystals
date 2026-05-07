@@ -95,6 +95,7 @@ type ZoneSpecMap = { [id: string]: any };
 interface RenderOpts {
   zoneSpec?: ZoneSpecMap | null;
   scenario?: any | null;  // ScenarioEntry from 01-scenario-spec; when set, zones filter to scenario.active_zones and crystal dots render
+  itemSpec?: { [id: string]: any } | null;  // ItemClassEntry map from 06-item-spec; when set with scenario, items render
 }
 
 function renderCrossSectionInto(container: HTMLElement, opts?: RenderOpts): void {
@@ -106,6 +107,7 @@ function renderCrossSectionInto(container: HTMLElement, opts?: RenderOpts): void
 function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
   const zoneSpec = opts.zoneSpec ?? null;
   const scenario = opts.scenario ?? null;
+  const itemSpec = opts.itemSpec ?? null;
   // Effective zone subset for tinting: when a scenario is selected, only
   // its active_zones render; otherwise (OVERVIEW mode) all zones render.
   // Crystal dot placement uses the FULL zoneSpec regardless — see
@@ -219,6 +221,46 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
     const yTop = cellTopYM + cursorMDepth;
     parts.push(`<rect class="${layer.cls}" x="${X(cellLeftXTopM - 2)}" y="${Y(yTop)}" width="${(cfg.cellTopWidthM + 4) * PX_PER_M}" height="${layer.thicknessM * PX_PER_M}" />`);
     cursorMDepth += layer.thicknessM;
+  }
+
+  // ── Item layer ──
+  // Discrete inventory items placed in the cell — appliances, batteries,
+  // drywall sheets, etc. Per the boss's 2026-05-07 framing: 'track what
+  // garbage is where before it breaks down.' Items render BEFORE the zone
+  // overlay so the chemistry-territory tint paints over them at low
+  // opacity; items still read through. Coarse-rigid items render as
+  // hollow rectangles (the literal-vug aesthetic from project memory:
+  // appliances ARE vugs, with internal voids that survive burial); medium
+  // items render as small filled rectangles. fines class is skipped.
+  if (scenario && itemSpec && typeof generatePlacedItems === "function") {
+    const upperLayersMTotal = cfg.upperLayers.reduce((s, l) => s + l.thicknessM, 0);
+    const lowerLayersMTotal = cfg.lowerLayers.reduce((s, l) => s + l.thicknessM, 0);
+    const popGeom = {
+      cellTopWidthM: cfg.cellTopWidthM,
+      cellBottomWidthM: cfg.cellBottomWidthM,
+      cellDepthM: cfg.cellDepthM,
+      nativeFlankWidthM: cfg.nativeFlankWidthM,
+      upperLayersM: upperLayersMTotal,
+      lowerLayersM: lowerLayersMTotal,
+      cellTopYM: cellTopYM,
+    };
+    const populationResult = generatePlacedItems(scenario, itemSpec, popGeom);
+    const items = populationResult.items;
+    parts.push(`<g class="item-layer">`);
+    for (const it of items) {
+      const cx = X(it.x_m);
+      const cy = Y(it.y_m);
+      const w = it.w_m * PX_PER_M;
+      const h = it.h_m * PX_PER_M;
+      const xLeft = cx - w / 2;
+      const yTop = cy - h / 2;
+      // Coarse-rigid items render as hollow rectangles (the vug). Mediums
+      // render as semi-filled rectangles. data-item-id lets future passes
+      // anchor crystals to specific items.
+      const cls = `item item-${it.size_class} item-class-${it.class_id}`;
+      parts.push(`<rect class="${cls}" x="${xLeft}" y="${yTop}" width="${w}" height="${h}" data-item-id="${it.id}" data-class-id="${it.class_id}"><title>${it.display_name}</title></rect>`);
+    }
+    parts.push(`</g>`); // end item-layer
   }
 
   // ── Chemistry-zone overlay ──
@@ -604,5 +646,31 @@ function svgStyle(): string {
     /* Selected dot — a brighter halo so the examined crystal reads at a
        glance against the cell's other paragenesis. */
     .dot.selected { stroke: #ffd76a; stroke-width: 1.2; stroke-opacity: 1.0; }
+
+    /* ── Item layer ──
+       Discrete inventory items snapped to a 1m × 1m tile grid. Coarse-rigid
+       items (appliances, car bodies, tires) render as hollow rectangles —
+       the literal-vug aesthetic per project memory: appliances ARE vugs,
+       internal voids that survive burial. Medium items render as semi-
+       filled rectangles. Lower opacity than zone tints so chemistry
+       territory still reads on top. */
+    .item { stroke: #ad8642; stroke-width: 0.6; stroke-opacity: 0.85; }
+    .item-coarse_rigid_void { fill: none; stroke-width: 0.8; }
+    .item-medium { fill: #6c4818; fill-opacity: 0.55; }
+    /* Item-class tints — substrate-bearing color cues. Refrigerators read
+       as galvanized steel grey-blue; lead-acid batteries as battery-acid
+       amber; drywall as dusty white; concrete as cool grey; etc. */
+    .item-class-refrigerator    { stroke: #88a8c8; }
+    .item-class-washing_machine { stroke: #88a8c8; }
+    .item-class-water_heater    { stroke: #98a4b8; }
+    .item-class-car_body        { stroke: #c08840; }
+    .item-class-tv_cabinet      { stroke: #6c5c4c; }
+    .item-class-tire            { stroke: #2c2820; fill: #1a1814; fill-opacity: 0.6; }
+    .item-class-lead_acid_battery { stroke: #a87c2c; fill: #4c3818; fill-opacity: 0.7; }
+    .item-class-drywall_sheet     { stroke: #b8b0a0; fill: #5c5448; fill-opacity: 0.6; }
+    .item-class-concrete_chunk    { stroke: #908878; fill: #3c3830; fill-opacity: 0.7; }
+    .item-class-pvc_pipe_section  { stroke: #d8c0a0; fill: #503820; fill-opacity: 0.55; }
+    .item-class-copper_wire_bundle { stroke: #c87038; fill: #3c1c0c; fill-opacity: 0.7; }
+    .item-class-rebar_bundle      { stroke: #807868; fill: #2c2820; fill-opacity: 0.7; }
   </style>`;
 }

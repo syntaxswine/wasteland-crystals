@@ -82,6 +82,7 @@ interface ScenarioEntry {
   waste_age_years: number;
   dominant_phase: DominantPhase;
   active_zones: string[];
+  items_in_cell?: { [itemClassId: string]: number };
   substrate_inventory: SubstrateInventoryItem[];
   leachate_chemistry: ScenarioLeachateChemistry;
   expected_species: { [mineralId: string]: ScenarioExpectedSpecies };

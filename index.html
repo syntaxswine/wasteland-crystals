@@ -885,6 +885,239 @@ async function _loadPrecursorSpec() {
 }
 _loadPrecursorSpec();
 
+// ── 06-item-spec.js ──
+
+// ============================================================
+// js/06-item-spec.ts — item-class spec types + loader
+// ============================================================
+//
+// Type declarations for the item-class catalog at data/item_classes.json.
+// Per the boss's 2026-05-07 design framing: 'there should be a variable
+// inventory of items in the trash that can break down. you will probably
+// want a system to track what garbage is where before it breaks down.'
+//
+// Item classes are the discrete things that exist in a cell — appliances,
+// batteries, drywall sheets, etc. Each carries the substrate tokens it
+// contributes to local chemistry. Per-scenario item counts live in
+// scenarios.json items_in_cell; placement is procedural (07-cell-population.ts)
+// with a deterministic seed.
+//
+// Loader: at boot, fetch data/item_classes.json and assign the .item_classes
+// dict to the global ITEM_SPEC. Until the fetch resolves, ITEM_SPEC is null.
+// Code that needs the spec should await onItemSpecReady() or check
+// ITEM_SPEC_READY.
+let ITEM_SPEC = null;
+let ITEM_SPEC_READY = false;
+const _itemReadyCallbacks = [];
+function onItemSpecReady(cb) {
+    if (ITEM_SPEC_READY)
+        cb();
+    else
+        _itemReadyCallbacks.push(cb);
+}
+async function _loadItemSpec() {
+    try {
+        const resp = await fetch("data/item_classes.json");
+        if (!resp.ok)
+            throw new Error(`HTTP ${resp.status}`);
+        const file = (await resp.json());
+        ITEM_SPEC = file.item_classes;
+        ITEM_SPEC_READY = true;
+        for (const cb of _itemReadyCallbacks)
+            cb();
+        _itemReadyCallbacks.length = 0;
+        const sz = file._audit_summary.by_size_class;
+        const szLine = `${sz.coarse_rigid_void ?? 0} coarse_rigid_void / ${sz.medium ?? 0} medium / ${sz.fines ?? 0} fines`;
+        console.info(`[items] loaded ${Object.keys(file.item_classes).length} item classes from data/item_classes.json (schema ${file._schema_version}; ${szLine})`);
+    }
+    catch (e) {
+        console.warn(`[items] data/item_classes.json fetch failed: ${e instanceof Error ? e.message : e}. ITEM_SPEC remains null.`);
+    }
+}
+_loadItemSpec();
+
+// ── 07-cell-population.js ──
+
+// ============================================================
+// js/07-cell-population.ts — deterministic tile-grid item placement
+// ============================================================
+//
+// Given a scenario's items_in_cell counts and the loaded item-class catalog,
+// returns a list of placed items snapped to a 1m × 1m tile grid covering
+// the trapezoid's waste body. Per the boss's 2026-05-07 design framing:
+// 'track what garbage is where before it breaks down' + 'a grid would be
+// ideal, that way if there's a mining element later it makes tiles easier
+// to handle.'
+//
+// Grid topology (TILE_SIZE_M = 1.0):
+// - cell-local origin: top-left of the cell rim (inside the native flank,
+//   at world x = nativeFlankWidthM, y = cellTopYM = aboveGradeM)
+// - col (0..cellTopWidthM-1) is the horizontal tile index
+// - row (0..cellDepthM-1) is the vertical tile index, increasing downward
+// - tile (col, row) is "valid" when its full footprint sits within the
+//   waste-body band (between cap stack and LCS+liner) AND inside the
+//   trapezoid's slanted walls at that depth
+//
+// Placement algorithm (v0.1 — deterministic random with no-overlap):
+// - Item classes processed largest-area-first (cars before fridges before
+//   batteries) so big items get first claim on tiles. Same-class items
+//   processed in instance-index order.
+// - Each item gets a deterministic mulberry32 PRNG seeded by
+//   (scenario.id + class_id + instance_index). Up to MAX_PLACEMENT_TRIES
+//   attempts to find a valid + unoccupied tile block; items that can't
+//   fit after MAX tries are dropped (warn-via-console at boot).
+// - Each placed tile is recorded in an occupancy map; subsequent items
+//   skip occupied tiles. The occupancy map is exported alongside the
+//   placed-item list so future mining code can address tiles directly.
+//
+// NOT YET IMPLEMENTED (slated for future passes):
+// - Differential settlement physics (dense items sink toward bottom of
+//   each lift; rigid items resist compaction; fines fill voids).
+// - Decay state (each item carries an age fraction relative to closure;
+//   future passes will visualize decay as opacity/edge dissolve).
+// - Crystal anchoring to specific tiles (next pass: each crystal dot
+//   inherits the tile it sits in, so the narrator can name the host item
+//   "battery #3 at lift 4 col 22 row 18").
+const TILE_SIZE_M = 1.0;
+const MAX_PLACEMENT_TRIES = 50;
+function _hashStr07(s) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+}
+function _mulberry32_07(seed) {
+    let t = seed >>> 0;
+    return function () {
+        t = (t + 0x6D2B79F5) >>> 0;
+        let r = t;
+        r = Math.imul(r ^ (r >>> 15), r | 1);
+        r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+}
+// Trapezoid clip: at cell-local depth y_m, returns the x-range (in cell-local
+// meters) that is INSIDE the slanted walls. cell-local x=0 is at the cell's
+// upper-left rim corner.
+function _trapezoidXRangeAt(geom, yLocalM) {
+    const t = yLocalM / geom.cellDepthM;
+    const wAtDepth = geom.cellTopWidthM * (1 - t) + geom.cellBottomWidthM * t;
+    const leftXM = (geom.cellTopWidthM - wAtDepth) / 2;
+    return { leftXM, rightXM: leftXM + wAtDepth };
+}
+// Test whether the rectangular tile block (col..col+w-1, row..row+h-1) fits
+// entirely within the waste-body band AND inside the trapezoid's slanted
+// walls at every tile's center depth.
+function _tileBlockValid(geom, col, row, wTiles, hTiles) {
+    for (let dr = 0; dr < hTiles; dr++) {
+        const yCellLocal = (row + dr + 0.5) * TILE_SIZE_M;
+        if (yCellLocal < geom.upperLayersM)
+            return false;
+        if (yCellLocal > geom.cellDepthM - geom.lowerLayersM)
+            return false;
+        const range = _trapezoidXRangeAt(geom, yCellLocal);
+        for (let dc = 0; dc < wTiles; dc++) {
+            const xCellLocal = (col + dc + 0.5) * TILE_SIZE_M;
+            if (xCellLocal < range.leftXM)
+                return false;
+            if (xCellLocal > range.rightXM)
+                return false;
+        }
+    }
+    return true;
+}
+function _isBlockFree(occupancy, col, row, wTiles, hTiles) {
+    for (let dr = 0; dr < hTiles; dr++) {
+        for (let dc = 0; dc < wTiles; dc++) {
+            if (occupancy[`${col + dc},${row + dr}`])
+                return false;
+        }
+    }
+    return true;
+}
+function _markBlockOccupied(occupancy, col, row, wTiles, hTiles, itemId) {
+    for (let dr = 0; dr < hTiles; dr++) {
+        for (let dc = 0; dc < wTiles; dc++) {
+            occupancy[`${col + dc},${row + dr}`] = itemId;
+        }
+    }
+}
+function generatePlacedItems(scenario, itemSpec, geom) {
+    const items = [];
+    const occupancy = {};
+    const unplaced = {};
+    const gridCols = Math.floor(geom.cellTopWidthM / TILE_SIZE_M);
+    const gridRows = Math.floor(geom.cellDepthM / TILE_SIZE_M);
+    if (!scenario || !itemSpec || !scenario.items_in_cell) {
+        return { items, occupancy, unplaced, grid_cols: gridCols, grid_rows: gridRows, tile_size_m: TILE_SIZE_M };
+    }
+    const counts = scenario.items_in_cell;
+    // Sort classes largest-area-first so cars + fridges claim tiles before
+    // batteries + drywall. Same-area ties broken by class_id alphabetical.
+    const classOrder = Object.keys(counts)
+        .filter((cid) => itemSpec[cid] && itemSpec[cid].size_class !== "fines")
+        .map((cid) => {
+        const k = itemSpec[cid];
+        const wT = Math.max(1, Math.round(k.typical_dim_m[0] / TILE_SIZE_M));
+        const hT = Math.max(1, Math.round(k.typical_dim_m[1] / TILE_SIZE_M));
+        return { classId: cid, area: wT * hT, wT, hT };
+    })
+        .sort((a, b) => b.area - a.area || a.classId.localeCompare(b.classId));
+    for (const co of classOrder) {
+        const classId = co.classId;
+        const klass = itemSpec[classId];
+        const wTiles = co.wT;
+        const hTiles = co.hT;
+        const count = counts[classId];
+        for (let i = 0; i < count; i++) {
+            const seed = _hashStr07(`${scenario.id}|${classId}|${i}`);
+            const rng = _mulberry32_07(seed);
+            let placedThis = false;
+            for (let attempt = 0; attempt < MAX_PLACEMENT_TRIES; attempt++) {
+                // Pick a random anchor (col, row) such that the block fits inside the
+                // grid bounds. Trapezoid + occupancy validity checked next.
+                const col = Math.floor(rng() * Math.max(1, gridCols - wTiles + 1));
+                const row = Math.floor(rng() * Math.max(1, gridRows - hTiles + 1));
+                if (!_tileBlockValid(geom, col, row, wTiles, hTiles))
+                    continue;
+                if (!_isBlockFree(occupancy, col, row, wTiles, hTiles))
+                    continue;
+                const itemId = `${classId}_${i}`;
+                _markBlockOccupied(occupancy, col, row, wTiles, hTiles, itemId);
+                // Convert tile coords to world meters for the renderer.
+                const cellLocalCenterX = (col + wTiles / 2) * TILE_SIZE_M;
+                const cellLocalCenterY = (row + hTiles / 2) * TILE_SIZE_M;
+                const worldX = geom.nativeFlankWidthM + cellLocalCenterX;
+                const worldY = geom.cellTopYM + cellLocalCenterY;
+                items.push({
+                    id: itemId,
+                    class_id: classId,
+                    display_name: klass.display_name,
+                    substrate_tokens: klass.substrate_tokens,
+                    size_class: klass.size_class,
+                    rigid: klass.rigid,
+                    tile_col: col,
+                    tile_row: row,
+                    tile_w: wTiles,
+                    tile_h: hTiles,
+                    x_m: worldX,
+                    y_m: worldY,
+                    w_m: wTiles * TILE_SIZE_M,
+                    h_m: hTiles * TILE_SIZE_M,
+                });
+                placedThis = true;
+                break;
+            }
+            if (!placedThis) {
+                unplaced[classId] = (unplaced[classId] ?? 0) + 1;
+            }
+        }
+    }
+    return { items, occupancy, unplaced, grid_cols: gridCols, grid_rows: gridRows, tile_size_m: TILE_SIZE_M };
+}
+
 // ── 15-version.js ──
 
 // ============================================================
@@ -1047,7 +1280,54 @@ _loadPrecursorSpec();
 //        the per-mineral narrators called out in PROPOSAL §"Per-mineral
 //        narrators" — same data shape (mineral × scenario × zone) that
 //        the per-step growth narrators will eventually consume.
-const WASTELAND_VERSION = "v6";
+//   v7 — item-class catalog + tile-grid cell population (2026-05-07):
+//        per the boss's framing 'there should be a variable inventory of
+//        items in the trash that can break down. you will probably want a
+//        system to track what garbage is where before it breaks down' +
+//        'a grid would be ideal, that way if there's a mining element
+//        later it makes tiles easier to handle.' Discrete items get the
+//        same data spine treatment as minerals/scenarios/zones/precursors.
+//        - data/item_classes.json — 13 classes covering the substrates
+//          referenced by minerals.json + scenarios.json. Six coarse-rigid
+//          (refrigerator, washing_machine, car_body, water_heater, tv_
+//          cabinet, tire — the literal-vug items per project memory),
+//          six medium (lead_acid_battery, drywall_sheet, concrete_chunk,
+//          pvc_pipe_section, copper_wire_bundle, rebar_bundle), one
+//          fines (organic_matrix as background presence).
+//        - js/06-item-spec.ts — loader, parallel to the other spec files.
+//        - js/07-cell-population.ts — deterministic tile-grid placement.
+//          Cell pit decomposed into 1m × 1m tiles (80 cols × 30 rows =
+//          2400 tiles, with the trapezoid clip and waste-body band
+//          masking off invalid tiles). Items snap to tile blocks sized
+//          from typical_dim_m. Placement: classes processed largest-area-
+//          first so cars + fridges claim tiles before batteries + drywall;
+//          mulberry32 PRNG seeded by (scenario.id + class_id + index)
+//          gives stable layouts; up to 50 placement tries per item with
+//          no-overlap enforcement; items that can't fit logged as
+//          unplaced (informational, not an error).
+//        - scenarios.json gains items_in_cell: {class_id → count} per
+//          scenario. MSG = 48 placeable items, Halbenrain = 46. Both
+//          European municipal cells with similar inventories; future
+//          scenarios (MSWI bottom-ash, demolition pile) will diverge.
+//        - js/99-renderer-cross-section.ts adds an item layer rendering
+//          BEFORE the zone overlay so chemistry tints paint over items
+//          at low opacity. Coarse-rigid items render as hollow rectangles
+//          (the literal-vug aesthetic — fill: none, outlined edges);
+//          medium items render as semi-filled rectangles. Per-class CSS
+//          tints color-cue substrates: galvanized blue-grey, battery
+//          amber, drywall dusty-white, concrete cool-grey, copper-wire
+//          burnt-orange, etc. Each <rect> carries data-item-id and
+//          data-class-id for future click handlers; <title> tooltip
+//          gives the display name on hover.
+//        Engine implications: the tile grid is the substrate the future
+//        mining mechanic will operate on. Each tile is an extractable
+//        unit; multi-tile items are extracted as wholes. Crystal-to-item
+//        anchoring and decay-state are slated for v8/v9.
+//        NOTE: item placement uses its own deterministic seed independent
+//        of WASTELAND_VERSION-bumping rules — no scenario chemistry has
+//        run yet. The version bump tracks the new data spine arriving
+//        rather than a chemistry change.
+const WASTELAND_VERSION = "v7";
 
 // ── 99-renderer-cross-section.js ──
 
@@ -1111,6 +1391,7 @@ function renderCrossSectionInto(container, opts) {
 function buildSchematicSVG(cfg, opts) {
     const zoneSpec = opts.zoneSpec ?? null;
     const scenario = opts.scenario ?? null;
+    const itemSpec = opts.itemSpec ?? null;
     // Effective zone subset for tinting: when a scenario is selected, only
     // its active_zones render; otherwise (OVERVIEW mode) all zones render.
     // Crystal dot placement uses the FULL zoneSpec regardless — see
@@ -1207,6 +1488,45 @@ function buildSchematicSVG(cfg, opts) {
         const yTop = cellTopYM + cursorMDepth;
         parts.push(`<rect class="${layer.cls}" x="${X(cellLeftXTopM - 2)}" y="${Y(yTop)}" width="${(cfg.cellTopWidthM + 4) * PX_PER_M}" height="${layer.thicknessM * PX_PER_M}" />`);
         cursorMDepth += layer.thicknessM;
+    }
+    // ── Item layer ──
+    // Discrete inventory items placed in the cell — appliances, batteries,
+    // drywall sheets, etc. Per the boss's 2026-05-07 framing: 'track what
+    // garbage is where before it breaks down.' Items render BEFORE the zone
+    // overlay so the chemistry-territory tint paints over them at low
+    // opacity; items still read through. Coarse-rigid items render as
+    // hollow rectangles (the literal-vug aesthetic from project memory:
+    // appliances ARE vugs, with internal voids that survive burial); medium
+    // items render as small filled rectangles. fines class is skipped.
+    if (scenario && itemSpec && typeof generatePlacedItems === "function") {
+        const upperLayersMTotal = cfg.upperLayers.reduce((s, l) => s + l.thicknessM, 0);
+        const lowerLayersMTotal = cfg.lowerLayers.reduce((s, l) => s + l.thicknessM, 0);
+        const popGeom = {
+            cellTopWidthM: cfg.cellTopWidthM,
+            cellBottomWidthM: cfg.cellBottomWidthM,
+            cellDepthM: cfg.cellDepthM,
+            nativeFlankWidthM: cfg.nativeFlankWidthM,
+            upperLayersM: upperLayersMTotal,
+            lowerLayersM: lowerLayersMTotal,
+            cellTopYM: cellTopYM,
+        };
+        const populationResult = generatePlacedItems(scenario, itemSpec, popGeom);
+        const items = populationResult.items;
+        parts.push(`<g class="item-layer">`);
+        for (const it of items) {
+            const cx = X(it.x_m);
+            const cy = Y(it.y_m);
+            const w = it.w_m * PX_PER_M;
+            const h = it.h_m * PX_PER_M;
+            const xLeft = cx - w / 2;
+            const yTop = cy - h / 2;
+            // Coarse-rigid items render as hollow rectangles (the vug). Mediums
+            // render as semi-filled rectangles. data-item-id lets future passes
+            // anchor crystals to specific items.
+            const cls = `item item-${it.size_class} item-class-${it.class_id}`;
+            parts.push(`<rect class="${cls}" x="${xLeft}" y="${yTop}" width="${w}" height="${h}" data-item-id="${it.id}" data-class-id="${it.class_id}"><title>${it.display_name}</title></rect>`);
+        }
+        parts.push(`</g>`); // end item-layer
     }
     // ── Chemistry-zone overlay ──
     // Composes over the lift bands and engineered layers within the trapezoid.
@@ -1578,6 +1898,32 @@ function svgStyle() {
     /* Selected dot — a brighter halo so the examined crystal reads at a
        glance against the cell's other paragenesis. */
     .dot.selected { stroke: #ffd76a; stroke-width: 1.2; stroke-opacity: 1.0; }
+
+    /* ── Item layer ──
+       Discrete inventory items snapped to a 1m × 1m tile grid. Coarse-rigid
+       items (appliances, car bodies, tires) render as hollow rectangles —
+       the literal-vug aesthetic per project memory: appliances ARE vugs,
+       internal voids that survive burial. Medium items render as semi-
+       filled rectangles. Lower opacity than zone tints so chemistry
+       territory still reads on top. */
+    .item { stroke: #ad8642; stroke-width: 0.6; stroke-opacity: 0.85; }
+    .item-coarse_rigid_void { fill: none; stroke-width: 0.8; }
+    .item-medium { fill: #6c4818; fill-opacity: 0.55; }
+    /* Item-class tints — substrate-bearing color cues. Refrigerators read
+       as galvanized steel grey-blue; lead-acid batteries as battery-acid
+       amber; drywall as dusty white; concrete as cool grey; etc. */
+    .item-class-refrigerator    { stroke: #88a8c8; }
+    .item-class-washing_machine { stroke: #88a8c8; }
+    .item-class-water_heater    { stroke: #98a4b8; }
+    .item-class-car_body        { stroke: #c08840; }
+    .item-class-tv_cabinet      { stroke: #6c5c4c; }
+    .item-class-tire            { stroke: #2c2820; fill: #1a1814; fill-opacity: 0.6; }
+    .item-class-lead_acid_battery { stroke: #a87c2c; fill: #4c3818; fill-opacity: 0.7; }
+    .item-class-drywall_sheet     { stroke: #b8b0a0; fill: #5c5448; fill-opacity: 0.6; }
+    .item-class-concrete_chunk    { stroke: #908878; fill: #3c3830; fill-opacity: 0.7; }
+    .item-class-pvc_pipe_section  { stroke: #d8c0a0; fill: #503820; fill-opacity: 0.55; }
+    .item-class-copper_wire_bundle { stroke: #c87038; fill: #3c1c0c; fill-opacity: 0.7; }
+    .item-class-rebar_bundle      { stroke: #807868; fill: #2c2820; fill-opacity: 0.7; }
   </style>`;
 }
 
@@ -1644,6 +1990,20 @@ function svgStyle() {
         });
       }
 
+      if (typeof onItemSpecReady === "function") {
+        onItemSpecReady(function () {
+          if (typeof ITEM_SPEC !== "undefined" && ITEM_SPEC !== null) {
+            var ids = Object.keys(ITEM_SPEC);
+            var bySize = { coarse_rigid_void: 0, medium: 0, fines: 0 };
+            for (var i = 0; i < ids.length; i++) {
+              var sz = ITEM_SPEC[ids[i]].size_class;
+              if (bySize[sz] !== undefined) bySize[sz]++;
+            }
+            pre.textContent += "\n[ITEM] " + ids.length + " item classes loaded (" + bySize.coarse_rigid_void + " coarse_rigid_void / " + bySize.medium + " medium / " + bySize.fines + " fines)";
+          }
+        });
+      }
+
       if (typeof onPrecursorSpecReady === "function") {
         onPrecursorSpecReady(function () {
           if (typeof PRECURSOR_SPEC !== "undefined" && PRECURSOR_SPEC !== null) {
@@ -1691,7 +2051,10 @@ function svgStyle() {
 
       function rerenderForActiveScenario() {
         if (typeof renderCrossSectionInto !== "function") return;
-        var opts = { zoneSpec: typeof ZONE_SPEC !== "undefined" ? ZONE_SPEC : null };
+        var opts = {
+          zoneSpec: typeof ZONE_SPEC !== "undefined" ? ZONE_SPEC : null,
+          itemSpec: typeof ITEM_SPEC !== "undefined" ? ITEM_SPEC : null,
+        };
         if (activeScenarioId && typeof SCENARIO_SPEC !== "undefined" && SCENARIO_SPEC && SCENARIO_SPEC[activeScenarioId]) {
           opts.scenario = SCENARIO_SPEC[activeScenarioId];
         }

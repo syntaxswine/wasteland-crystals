@@ -160,4 +160,52 @@
 //        narrators" — same data shape (mineral × scenario × zone) that
 //        the per-step growth narrators will eventually consume.
 
-const WASTELAND_VERSION = "v6";
+//   v7 — item-class catalog + tile-grid cell population (2026-05-07):
+//        per the boss's framing 'there should be a variable inventory of
+//        items in the trash that can break down. you will probably want a
+//        system to track what garbage is where before it breaks down' +
+//        'a grid would be ideal, that way if there's a mining element
+//        later it makes tiles easier to handle.' Discrete items get the
+//        same data spine treatment as minerals/scenarios/zones/precursors.
+//        - data/item_classes.json — 13 classes covering the substrates
+//          referenced by minerals.json + scenarios.json. Six coarse-rigid
+//          (refrigerator, washing_machine, car_body, water_heater, tv_
+//          cabinet, tire — the literal-vug items per project memory),
+//          six medium (lead_acid_battery, drywall_sheet, concrete_chunk,
+//          pvc_pipe_section, copper_wire_bundle, rebar_bundle), one
+//          fines (organic_matrix as background presence).
+//        - js/06-item-spec.ts — loader, parallel to the other spec files.
+//        - js/07-cell-population.ts — deterministic tile-grid placement.
+//          Cell pit decomposed into 1m × 1m tiles (80 cols × 30 rows =
+//          2400 tiles, with the trapezoid clip and waste-body band
+//          masking off invalid tiles). Items snap to tile blocks sized
+//          from typical_dim_m. Placement: classes processed largest-area-
+//          first so cars + fridges claim tiles before batteries + drywall;
+//          mulberry32 PRNG seeded by (scenario.id + class_id + index)
+//          gives stable layouts; up to 50 placement tries per item with
+//          no-overlap enforcement; items that can't fit logged as
+//          unplaced (informational, not an error).
+//        - scenarios.json gains items_in_cell: {class_id → count} per
+//          scenario. MSG = 48 placeable items, Halbenrain = 46. Both
+//          European municipal cells with similar inventories; future
+//          scenarios (MSWI bottom-ash, demolition pile) will diverge.
+//        - js/99-renderer-cross-section.ts adds an item layer rendering
+//          BEFORE the zone overlay so chemistry tints paint over items
+//          at low opacity. Coarse-rigid items render as hollow rectangles
+//          (the literal-vug aesthetic — fill: none, outlined edges);
+//          medium items render as semi-filled rectangles. Per-class CSS
+//          tints color-cue substrates: galvanized blue-grey, battery
+//          amber, drywall dusty-white, concrete cool-grey, copper-wire
+//          burnt-orange, etc. Each <rect> carries data-item-id and
+//          data-class-id for future click handlers; <title> tooltip
+//          gives the display name on hover.
+//        Engine implications: the tile grid is the substrate the future
+//        mining mechanic will operate on. Each tile is an extractable
+//        unit; multi-tile items are extracted as wholes. Crystal-to-item
+//        anchoring and decay-state are slated for v8/v9.
+//        NOTE: item placement uses its own deterministic seed independent
+//        of WASTELAND_VERSION-bumping rules — no scenario chemistry has
+//        run yet. The version bump tracks the new data spine arriving
+//        rather than a chemistry change.
+
+const WASTELAND_VERSION = "v7";

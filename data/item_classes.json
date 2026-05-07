@@ -1,0 +1,202 @@
+{
+  "_schema_version": "0.1.0",
+  "_last_updated": "2026-05-07",
+  "_source_of_truth_for": ["js/07-cell-population.ts", "js/99-renderer-cross-section.ts"],
+  "_source_of_truth_note": "Canonical item-class spec for Wasteland Crystals. Per the boss's 2026-05-07 design framing: 'there should be a variable inventory of items in the trash that can break down. you will probably want a system to track what garbage is where before it breaks down.' This file defines the discrete things that exist in a cell — appliances, batteries, drywall sheets, etc. — each tagged with the substrate tokens it contributes to the chemistry. Per-scenario item counts live in scenarios.json items_in_cell; cell-population (js/07-cell-population.ts) procedurally places each item with a deterministic seed. Project memory project_wasteland_crystals records the design principle: 'rigid hollow items (appliances) are LITERAL VUGS' — coarse_rigid_void items render as hollow rectangles in the schematic to make this explicit.",
+
+  "_schema": {
+    "id": "Slug matching the dictionary key.",
+    "display_name": "Display name for narrators and UI.",
+    "substrate_tokens": "Array of substrate tokens this item type contributes (matching minerals.json substrate_grows_on and scenarios.json substrate_inventory tokens). A refrigerator contains galvanized_steel + copper_wiring + plastic_housing — placing one fridge in a cell adds all three substrates locally.",
+    "size_class": "Renderer-relevant size: coarse_rigid_void (appliances, car bodies, tires — large rigid items that don't compact and create literal vugs in the strict mineralogical sense) | medium (batteries, drywall sheets, concrete chunks — smaller objects, can be displaced by compaction but not crushed) | fines (organic matrix, food waste, paper — fluffy material, fills voids between rigid items, rendered only as background).",
+    "rigid": "Boolean. true → item resists compaction and creates an internal void on burial. false → item compacts into the cell's matrix.",
+    "typical_dim_m": "[width_m, height_m] for 2D rendering. Reflects the item's apparent size in cross-section.",
+    "typical_mass_kg": "Approximate single-item mass. Used for future settling-physics; not yet wired in.",
+    "decay_phase_window": "Leachate phases during which this item type significantly decays. Used by the future decay model (not yet implemented in v7); kept here for forward compatibility.",
+    "decay_timescale_yr": "Approximate full-decay timescale in years. Used by the future decay model; informational for now.",
+    "description": "1-2 sentences in clinical-Borges register. Treated as data for the surveyor's notebook — the future-miner's reference for what each item means chemically."
+  },
+
+  "_audit_summary": {
+    "total_classes": 13,
+    "by_size_class": {
+      "coarse_rigid_void": 6,
+      "medium": 6,
+      "fines": 1
+    },
+    "_notes": "v0.1.0 item spine. Six coarse-rigid (the literal-vug items: refrigerator, washing_machine, car_body, water_heater, tv_cabinet, tire), six medium (lead_acid_battery, drywall_sheet, concrete_chunk, pvc_pipe_section, copper_wire_bundle, rebar_bundle), one matrix-fines (organic_matrix). Substrate-token coverage spans all the tokens in minerals.json substrate_grows_on plus scenarios.json substrate_inventory. NOT YET COVERED: hazardous-waste items (fluorescent tubes, paint cans), e-waste detail (PCB scrap as separate class), incinerator residues (MSWI bottom ash, fly ash). Slated for future scenarios."
+  },
+
+  "item_classes": {
+
+    "refrigerator": {
+      "id": "refrigerator",
+      "display_name": "Refrigerator",
+      "substrate_tokens": ["galvanized_steel", "copper_wiring", "plastic_housing"],
+      "size_class": "coarse_rigid_void",
+      "rigid": true,
+      "typical_dim_m": [0.7, 1.6],
+      "typical_mass_kg": 80,
+      "decay_phase_window": ["acid", "methanogenic", "stable"],
+      "decay_timescale_yr": 200,
+      "description": "Rigid appliance shell with galvanized inner liner, copper compressor coils, and plastic housing. Refrigerant lines (CFC or HCFC depending on era) leak out within decades; the steel shell rusts; the interior remains hollow as a literal vug for crystal nucleation on the inner surfaces."
+    },
+
+    "washing_machine": {
+      "id": "washing_machine",
+      "display_name": "Washing machine",
+      "substrate_tokens": ["galvanized_steel", "copper_wiring", "rebar_steel_scrap"],
+      "size_class": "coarse_rigid_void",
+      "rigid": true,
+      "typical_dim_m": [0.6, 0.9],
+      "typical_mass_kg": 70,
+      "decay_phase_window": ["acid", "methanogenic", "stable"],
+      "decay_timescale_yr": 180,
+      "description": "Rigid steel drum and chassis with copper motor windings and a cast-iron weight block. The drum's internal void survives burial; copper from the motor delivers Cu²⁺ to the local chemistry once the casing rusts through."
+    },
+
+    "car_body": {
+      "id": "car_body",
+      "display_name": "Car body",
+      "substrate_tokens": ["galvanized_steel", "copper_wiring", "lead_acid_battery", "plastic_housing"],
+      "size_class": "coarse_rigid_void",
+      "rigid": true,
+      "typical_dim_m": [3.5, 1.2],
+      "typical_mass_kg": 1200,
+      "decay_phase_window": ["acid", "methanogenic", "stable"],
+      "decay_timescale_yr": 300,
+      "description": "End-of-life vehicle body; the largest single coarse-rigid void in any cell that hosts one. Galvanized panels, copper wiring harness, residual lead-acid battery if not removed at scrap intake. Lifts compact around the body; the engine compartment and cabin remain as vug-grade interior voids for centuries."
+    },
+
+    "water_heater": {
+      "id": "water_heater",
+      "display_name": "Water heater",
+      "substrate_tokens": ["galvanized_steel", "copper_wiring"],
+      "size_class": "coarse_rigid_void",
+      "rigid": true,
+      "typical_dim_m": [0.55, 1.4],
+      "typical_mass_kg": 60,
+      "decay_phase_window": ["acid", "methanogenic", "stable"],
+      "decay_timescale_yr": 160,
+      "description": "Cylindrical galvanized steel tank with sacrificial-anode magnesium rod and copper inlet/outlet fittings. Tank internal volume preserved as void post-burial; the magnesium anode delivers Mg²⁺ to local chemistry."
+    },
+
+    "tv_cabinet": {
+      "id": "tv_cabinet",
+      "display_name": "TV cabinet",
+      "substrate_tokens": ["plastic_housing", "copper_wiring", "lead_solder", "lead_acid_battery"],
+      "size_class": "coarse_rigid_void",
+      "rigid": true,
+      "typical_dim_m": [0.6, 0.5],
+      "typical_mass_kg": 25,
+      "decay_phase_window": ["acid", "methanogenic", "stable"],
+      "decay_timescale_yr": 250,
+      "description": "Cathode-ray-tube or early flat-panel television in plastic-or-wood housing. PCB scrap inside delivers diffuse lead-solder and copper-wiring substrates; the leaded glass of CRT screens contributes Pb²⁺ to acidic pore water."
+    },
+
+    "tire": {
+      "id": "tire",
+      "display_name": "Tire",
+      "substrate_tokens": ["rubber", "rebar_steel_scrap"],
+      "size_class": "coarse_rigid_void",
+      "rigid": true,
+      "typical_dim_m": [0.65, 0.65],
+      "typical_mass_kg": 9,
+      "decay_phase_window": ["methanogenic", "stable", "burn_zone"],
+      "decay_timescale_yr": 500,
+      "description": "End-of-life tire with steel-belt reinforcement. Rubber matrix is highly stable under landfill conditions but pyrolyzes if the cell hosts a tire-pile fire — the resulting char is the documented source of the ZnS-rich precursor that delivers sphalerite under burn-zone chemistry."
+    },
+
+    "lead_acid_battery": {
+      "id": "lead_acid_battery",
+      "display_name": "Lead-acid battery",
+      "substrate_tokens": ["lead_acid_battery", "lead_solder"],
+      "size_class": "medium",
+      "rigid": false,
+      "typical_dim_m": [0.3, 0.2],
+      "typical_mass_kg": 15,
+      "decay_phase_window": ["acid"],
+      "decay_timescale_yr": 25,
+      "description": "Vehicle starter battery; the diagnostic Pb anchor in any MSW cell. Polypropylene casing splits within ~5–15 years of burial, releasing the H2SO4 electrolyte and exposing the Pb plates to leachate. Garcia Lopez observed these as metallic Pb relics in the Mont-Saint-Guibert <4.5 mm fines fraction."
+    },
+
+    "drywall_sheet": {
+      "id": "drywall_sheet",
+      "display_name": "Drywall sheet",
+      "substrate_tokens": ["drywall_gypsum"],
+      "size_class": "medium",
+      "rigid": false,
+      "typical_dim_m": [0.6, 0.4],
+      "typical_mass_kg": 18,
+      "decay_phase_window": ["methanogenic", "stable"],
+      "decay_timescale_yr": 80,
+      "description": "Construction-and-demolition gypsum board fragment. Dissolves slowly under leachate flow, delivering the SO4 the cell's sulfate-reducer chemistry runs on; the dominant sulfate source once battery acid is exhausted."
+    },
+
+    "concrete_chunk": {
+      "id": "concrete_chunk",
+      "display_name": "Concrete chunk",
+      "substrate_tokens": ["concrete_demolition", "rebar_steel_scrap"],
+      "size_class": "medium",
+      "rigid": true,
+      "typical_dim_m": [0.4, 0.35],
+      "typical_mass_kg": 50,
+      "decay_phase_window": ["acid", "methanogenic", "stable", "alkaline_cap"],
+      "decay_timescale_yr": 500,
+      "description": "C&D rubble fragment with embedded rebar. Cement matrix dissolves slowly under acidogenic VFAs; the embedded rebar delivers Fe²⁺ to local chemistry once exposed. The dominant Ca and HCO3 source for late-stage carbonate paragenesis."
+    },
+
+    "pvc_pipe_section": {
+      "id": "pvc_pipe_section",
+      "display_name": "PVC pipe section",
+      "substrate_tokens": ["pvc_plastic"],
+      "size_class": "medium",
+      "rigid": true,
+      "typical_dim_m": [0.5, 0.12],
+      "typical_mass_kg": 3,
+      "decay_phase_window": ["methanogenic", "stable"],
+      "decay_timescale_yr": 600,
+      "description": "Plumbing or drainage pipe section. PVC degrades slowly over centuries — HCl release becomes detectable around 40 yrs and continues; the chloride source that underwrites pyromorphite's Pb5(PO4)3Cl composition and goslarite's Zn-Cl coupling."
+    },
+
+    "copper_wire_bundle": {
+      "id": "copper_wire_bundle",
+      "display_name": "Copper wire bundle",
+      "substrate_tokens": ["copper_wiring"],
+      "size_class": "medium",
+      "rigid": false,
+      "typical_dim_m": [0.25, 0.15],
+      "typical_mass_kg": 4,
+      "decay_phase_window": ["acid", "methanogenic"],
+      "decay_timescale_yr": 100,
+      "description": "Stripped electrical cable, motor windings, or PCB scrap with exposed copper. Bare Cu corrodes under acidic leachate; insulated wire delays attack until the insulation degrades. The Cu²⁺ source for malachite, atacamite, and the broader copper-supergene suite at the wall flank."
+    },
+
+    "rebar_bundle": {
+      "id": "rebar_bundle",
+      "display_name": "Rebar bundle",
+      "substrate_tokens": ["rebar_steel_scrap"],
+      "size_class": "medium",
+      "rigid": true,
+      "typical_dim_m": [0.7, 0.1],
+      "typical_mass_kg": 45,
+      "decay_phase_window": ["acid", "methanogenic"],
+      "decay_timescale_yr": 200,
+      "description": "Steel reinforcement bar from the C&D fraction. Anaerobic corrosion under the methanogenic phase delivers Fe²⁺ at sustained rate; vivianite and pyrite recipients of this iron source."
+    },
+
+    "organic_matrix": {
+      "id": "organic_matrix",
+      "display_name": "Organic matrix",
+      "substrate_tokens": ["organic_slurry"],
+      "size_class": "fines",
+      "rigid": false,
+      "typical_dim_m": [0, 0],
+      "typical_mass_kg": 0,
+      "decay_phase_window": ["acid", "methanogenic", "stable"],
+      "decay_timescale_yr": 30,
+      "description": "Aggregated food waste, paper, yard trimmings, and biological tissue — the bulk matrix between rigid items. Not rendered as discrete objects; treated as a background presence that supplies PO4, NH4, organic VFAs, and the reducing potential running the methanogenic phase. Counts in scenarios.json items_in_cell are abstract 'mass units' rather than item counts."
+    }
+
+  }
+}
