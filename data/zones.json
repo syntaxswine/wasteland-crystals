@@ -1,0 +1,202 @@
+{
+  "_schema_version": "0.1.0",
+  "_last_updated": "2026-05-07",
+  "_source_of_truth_for": ["index.html", "js/99-renderer-cross-section.ts"],
+  "_source_of_truth_note": "Canonical chemistry-zone spec for Wasteland Crystals. The trapezoid (cell pit) is the substrate-bearing boundary — the engine port from vugg-simulator's wall = wasteland's cell-pit interior. Zones are the chemistry territories within that boundary: where on the trapezoid does which chemistry run. Boss design conversation 2026-05-07: 'I'm picturing the trapezoid as being like the wall of the vugg, where the whole shape can grow crystals, but certain ones are more likely in the middle concentration zone and certain ones are more common on the edges. some might be more common down deep.' Zones compose with substrate (per minerals.json substrate_grows_on) and per-scenario chemistry; a zone gates which chemistry runs there, but a mineral only nucleates if its substrate is also LOCALLY present and the chemistry meets its required_ingredients. Three axes (zone × substrate × chemistry), not zone alone.",
+
+  "_schema": {
+    "id": "Slug matching the dictionary key.",
+    "name": "Display name. Mining-report register, all-caps in the renderer.",
+    "position_class": "How the zone is geometrically defined: depth_band (horizontal slice across the trapezoid, optionally restricted by radial extent) | wall_band (parallel band along the slanted interior walls, parameterized by inset_m) | bottom_strip (occupies one of the engineered floor layers — currently lcs_biofilm only).",
+    "geometry": "Position-class-specific geometry parameters. depth_band uses depth_frac_top/depth_frac_bottom (fractions of cellDepthM, 0=top of waste body 1=bottom) and radial_extent_frac (1.0 = full width, <1.0 = center band only); wall_band uses inset_m (band thickness measured from the slanted wall inward); bottom_strip uses occupies (engineered-layer reference).",
+    "typical_phase": "Default leachate phase governing this zone: acid | methanogenic | stable | alkaline_cap | burn_zone. Composes with per-scenario dominant_phase — a young cell's stable_basal zone is still developing, a mature cell's acidogenic_horizon may have already drifted into methanogenic.",
+    "typical_redox": "reducing | oxidizing | mixed | drainage_oxidized",
+    "characteristic_ions_mg_per_L": "Typical leachate composition for this zone. Per-scenario chemistry can override; these are baselines.",
+    "expected_mineral_clusters": "Mineral catalog IDs predicted to nucleate in this zone IF the substrate is locally present. The 'concentration zone' from the boss's framing — where each mineral is more LIKELY to grow — encoded as zone membership rather than a hard gate.",
+    "color_visual": "Chemistry-token color name for the renderer. Tokens map to RGBA in the renderer's palette function. Same pattern as minerals.json color_visual.",
+    "boundary_style": "How the zone boundary is rendered: dashed (default) | solid | none.",
+    "label": "Render label, all-caps, mining-report register.",
+    "description": "2-3 sentences in clinical-Borges register describing what's chemically happening in this zone."
+  },
+
+  "_audit_summary": {
+    "total_zones": 6,
+    "by_position_class": {
+      "depth_band": 4,
+      "wall_band": 1,
+      "bottom_strip": 1
+    },
+    "by_typical_phase": {
+      "acid_leaning": 2,
+      "methanogenic": 1,
+      "mixed": 1,
+      "stable": 1,
+      "biofilm": 1
+    },
+    "_notes": "v0.1.0 zone spine. Six zones cover the boss's 2026-05-07 mental model (depth × centrality, with the LCS biofilm pulled out as its own zone per the design conversation). The cap stack and composite liner are NOT zones — they're engineered substrates from DEFAULT_SCHEMATIC, not chemistry territories where crystals nucleate. Burn zones are NOT a position-class entry — fires happen wherever they happen, so burn chemistry will be a separate per-scenario overlay rather than a spatial zone. Per-scenario zone snapshots are deferred (current renderer overlays all zones at once as a master overview); future scenarios.json entries will declare which subset of zones is active at their phase snapshot."
+  },
+
+  "zones": {
+
+    "cap_contact": {
+      "id": "cap_contact",
+      "name": "Cap-contact oxidizing band",
+      "position_class": "depth_band",
+      "geometry": {
+        "depth_frac_top": 0.0,
+        "depth_frac_bottom": 0.12,
+        "radial_extent_frac": 1.0,
+        "_note": "Top ~3.6 m of waste body (12% of 30 m cell), full width. Sits directly under the engineered cap stack."
+      },
+      "typical_phase": "acid_leaning",
+      "typical_redox": "oxidizing",
+      "characteristic_ions_mg_per_L": {
+        "O2": 1.0,
+        "SO4": 80,
+        "Cl": 200,
+        "Fe": 8,
+        "Zn": 6
+      },
+      "expected_mineral_clusters": ["goslarite", "jarosite", "goethite", "cerussite", "tenorite", "cuprite"],
+      "color_visual": "rust_oxidizing_warm",
+      "boundary_style": "dashed",
+      "label": "CAP CONTACT — OXIDIZING",
+      "description": "Where rainwater infiltration through the cap meets the top of the waste body. Net oxidizing despite the cap's barrier intent — the gas-collection layer breathes in O2 from the wells, and infiltrating water arrives carrying dissolved O2 and CO2. The crystals here are sulfate efflorescences and ferric weathering products."
+    },
+
+    "acidogenic_horizon": {
+      "id": "acidogenic_horizon",
+      "name": "Acidogenic horizon",
+      "position_class": "depth_band",
+      "geometry": {
+        "depth_frac_top": 0.12,
+        "depth_frac_bottom": 0.30,
+        "radial_extent_frac": 0.92,
+        "_note": "Upper-mid band ~3.6–9 m. Slightly inset from walls (radial 0.92) to leave room for the wall-flank overlay. Only present in cells that haven't fully transitioned past the acidogenic phase."
+      },
+      "typical_phase": "acid",
+      "typical_redox": "mixed",
+      "characteristic_ions_mg_per_L": {
+        "SO4": 200,
+        "Cl": 300,
+        "Fe": 25,
+        "Zn": 15,
+        "Pb": 0.8,
+        "VFA_organics_mgC_per_L": 4000
+      },
+      "expected_mineral_clusters": ["goslarite", "anglesite", "jarosite", "simonkolleite"],
+      "color_visual": "sulfur_yellow_acid",
+      "boundary_style": "dashed",
+      "label": "ACIDOGENIC HORIZON",
+      "description": "Active fermentation zone in young-to-middle-aged cells: volatile fatty acids drive pH down to 5–6, sulfate from drywall remains uncomplexed by sulfide, and metals dissolve aggressively. Halbenrain-class cells host this zone broadly; Mont-Saint-Guibert-class cells have largely buried it as the methanogenic front migrated upward."
+    },
+
+    "methanogenic_core": {
+      "id": "methanogenic_core",
+      "name": "Methanogenic core",
+      "position_class": "depth_band",
+      "geometry": {
+        "depth_frac_top": 0.20,
+        "depth_frac_bottom": 0.78,
+        "radial_extent_frac": 0.78,
+        "_note": "Bulk anaerobic body, depths ~6–23 m, center 78% of width. Wall-flank cuts into the outer 11% of each side at every depth, leaving the methanogenic_core occupying the center fraction. The boss's 'middle concentration zone' — bulk reducing chemistry where biogenic sulfides dominate."
+      },
+      "typical_phase": "methanogenic",
+      "typical_redox": "reducing",
+      "characteristic_ions_mg_per_L": {
+        "S2": 1.0,
+        "PO4": 8,
+        "Cl": 200,
+        "Fe": 20,
+        "Zn": 4,
+        "Pb": 1.0,
+        "Cu": 0.5,
+        "CH4_dissolved": 30
+      },
+      "expected_mineral_clusters": ["sphalerite", "galena", "pyrite", "covellite", "vivianite", "native_copper", "native_silver", "struvite", "pyromorphite"],
+      "color_visual": "slate_blue_reducing",
+      "boundary_style": "dashed",
+      "label": "METHANOGENIC CORE",
+      "description": "Anaerobic bulk where sulfate-reducers, methanogens, and iron-reducers run the chemistry. Biogenic H2S converts dissolved metals to sulfides almost as fast as the metals dissolve from substrate; what survives unreacted long enough to migrate becomes the late-paragenetic phosphate and chloride suite below. Most of the cell's volume by mass."
+    },
+
+    "wall_contact_flank": {
+      "id": "wall_contact_flank",
+      "name": "Wall-contact flank",
+      "position_class": "wall_band",
+      "geometry": {
+        "inset_m": 3.0,
+        "_note": "Band within 3 m of the slanted interior wall, measured perpendicular to the wall surface. Wraps both left and right walls full-depth. The boss's 'edges' — but specifically the engineered-substrate contact zone, not the geometric periphery generically."
+      },
+      "typical_phase": "mixed",
+      "typical_redox": "drainage_oxidized",
+      "characteristic_ions_mg_per_L": {
+        "O2": 0.3,
+        "SO4": 100,
+        "Cl": 250,
+        "Fe": 12,
+        "Cu": 1.0,
+        "Zn": 6
+      },
+      "expected_mineral_clusters": ["malachite", "atacamite", "hydrozincite", "posnjakite"],
+      "color_visual": "drainage_pale_teal",
+      "boundary_style": "dashed",
+      "label": "WALL FLANK — DRAINAGE",
+      "description": "Slanted band along the cell's interior wall, where leachate drains downward along the geomembrane contact and groundwater bleeds in laterally through the native flank. Net drainage-oxidized despite the broader cell's reducing chemistry — the wall is the cell's permeability shortcut. Copper carbonates and chlorides preferentially mature here because the chemistry transitions fast enough to escape the methanogenic-core's sulfide trap."
+    },
+
+    "stable_basal": {
+      "id": "stable_basal",
+      "name": "Stable basal",
+      "position_class": "depth_band",
+      "geometry": {
+        "depth_frac_top": 0.78,
+        "depth_frac_bottom": 0.95,
+        "radial_extent_frac": 0.78,
+        "_note": "Deep band ~23.4–28.5 m, center fraction (excluding the wall-flank). The boss's 'down deep.' The cell's oldest, most-residence-time-accumulated chemistry. Pyromorphite and other late-paragenesis phases mature here once the methanogenic_core has drained its reactive metals upward."
+      },
+      "typical_phase": "stable",
+      "typical_redox": "reducing",
+      "characteristic_ions_mg_per_L": {
+        "S2": 0.3,
+        "PO4": 12,
+        "Cl": 250,
+        "Fe": 8,
+        "Pb": 1.5,
+        "Ca": 500
+      },
+      "expected_mineral_clusters": ["pyromorphite", "vivianite", "ettringite", "calcite", "galena"],
+      "color_visual": "deep_purple_stable",
+      "boundary_style": "dashed",
+      "label": "STABLE BASAL",
+      "description": "Cell's mature paragenesis zone. The reactive metals have largely been swept into the methanogenic_core's sulfides; what reaches stable_basal as still-soluble Pb is what couples with food-derived PO4, PVC-derived Cl, and concrete-derived Ca to grow pyromorphite — the four-way Mont-Saint-Guibert convergence. Calcite caps the late paragenesis as residual acid neutralizes against the C&D carbonate fraction."
+    },
+
+    "lcs_biofilm": {
+      "id": "lcs_biofilm",
+      "name": "LCS biofilm scaling zone",
+      "position_class": "bottom_strip",
+      "geometry": {
+        "occupies": "leachate_collection_layer",
+        "_note": "The 0.4 m engineered leachate-collection stripe at the trapezoid floor (already rendered as cls=layer-lcs in DEFAULT_SCHEMATIC.lowerLayers). The zone overlay re-tints this engineered band with its biofilm chemistry rather than treating it as inert substrate."
+      },
+      "typical_phase": "biofilm",
+      "typical_redox": "mixed",
+      "characteristic_ions_mg_per_L": {
+        "PO4": 30,
+        "NH4": 200,
+        "Mg": 80,
+        "Fe": 15,
+        "Ca": 800,
+        "S2": 0.3,
+        "biofilm_organic_matrix": "abundant"
+      },
+      "expected_mineral_clusters": ["vivianite", "struvite", "calcite", "pyrite"],
+      "color_visual": "biofilm_pale_green",
+      "boundary_style": "solid",
+      "label": "LCS BIOFILM",
+      "description": "Microbial-mat scaling assemblage on the leachate collection pipework and gravel. Documented in landfill operations as the chemistry that clogs LCS systems within 5–15 years of cell closure (Bennett/Fleming/Rowe biogeochemical clogging review): vivianite scales the iron-bearing surfaces, struvite the ammonium-magnesium-phosphate convergence, calcite caps everything as the leachate alkalinizes. A different zone from the methanogenic_core sitting directly above it."
+    }
+
+  }
+}

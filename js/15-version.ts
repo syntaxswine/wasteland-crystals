@@ -68,5 +68,30 @@
 //        'Update 2026-05-07: Operative narrative frame'). Still no
 //        engine — this is the second bedrock layer (after v1/v2's
 //        mineral spine) the engine layers will read from.
+//
+//   v4 — chemistry-zone spine (2026-05-07): canonical zone catalog at
+//        data/zones.json; the trapezoid (cell pit) decomposed into six
+//        chemistry territories per the boss's 2026-05-07 design framing
+//        (trapezoid-as-vugg-wall, depth × centrality). Zones:
+//        cap_contact (oxidizing top band) | acidogenic_horizon (acidic
+//        upper-mid, only present in young cells) | methanogenic_core
+//        (reducing center bulk, the boss's 'middle concentration zone')
+//        | wall_contact_flank (slanted band along interior walls, the
+//        'edges' — drainage-oxidized) | stable_basal (deep center,
+//        late paragenesis) | lcs_biofilm (engineered LCS layer with
+//        biofilm scaling chemistry — pulled out as its own zone per
+//        the design conversation, NOT collapsed into 'down deep').
+//        Schema: position_class (depth_band | wall_band | bottom_strip)
+//        + per-class geometry parameters + typical_phase + typical_redox
+//        + characteristic_ions + expected_mineral_clusters (catalog
+//        IDs that nucleate here IF substrate is locally present). The
+//        renderer overlays zones on the schematic as semi-transparent
+//        chemistry tints with dashed boundaries and in-zone labels;
+//        the schematic stops being just architecture and starts
+//        showing chemistry territory. Engine bump: zones gate
+//        nucleation (per minerals.json substrate × per scenario
+//        chemistry × per zone phase, all three axes) — even though
+//        no engine math runs yet, defining zones changes which
+//        minerals will nucleate where when it does.
 
-const WASTELAND_VERSION = "v3";
+const WASTELAND_VERSION = "v4";

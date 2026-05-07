@@ -87,13 +87,18 @@ const DEFAULT_SCHEMATIC: SchematicConfig = {
   monitoringWellXOffsetsM: [10, 10],
 };
 
-function renderCrossSectionInto(container: HTMLElement): void {
+// ZoneSpec is a parameter to keep the renderer module-independent — the actual
+// type is declared in 02-zone-spec.ts (loaded as a sibling module). We accept
+// any dict-of-zone-entries shape to avoid a hard cross-module type dep.
+type ZoneSpecMap = { [id: string]: any };
+
+function renderCrossSectionInto(container: HTMLElement, zoneSpec?: ZoneSpecMap | null): void {
   if (!container) return;
   const cfg = DEFAULT_SCHEMATIC;
-  container.innerHTML = buildSchematicSVG(cfg);
+  container.innerHTML = buildSchematicSVG(cfg, zoneSpec ?? null);
 }
 
-function buildSchematicSVG(cfg: SchematicConfig): string {
+function buildSchematicSVG(cfg: SchematicConfig, zoneSpec: ZoneSpecMap | null): string {
   // World extents in meters
   const totalWidthM = cfg.cellTopWidthM + 2 * cfg.nativeFlankWidthM;
   const cellEngineeredM =
@@ -200,6 +205,106 @@ function buildSchematicSVG(cfg: SchematicConfig): string {
     const yTop = cellTopYM + cursorMDepth;
     parts.push(`<rect class="${layer.cls}" x="${X(cellLeftXTopM - 2)}" y="${Y(yTop)}" width="${(cfg.cellTopWidthM + 4) * PX_PER_M}" height="${layer.thicknessM * PX_PER_M}" />`);
     cursorMDepth += layer.thicknessM;
+  }
+
+  // ── Chemistry-zone overlay ──
+  // Composes over the lift bands and engineered layers within the trapezoid.
+  // The waste body sits between liftBandTopM and liftBandBotM; depth fractions
+  // in the zone spec are normalized against the FULL cellDepthM (engineered
+  // layers included), matching the boss's mental model where the trapezoid
+  // is the cell, top to floor. Zones are drawn IN ORDER as supplied — earlier
+  // zones can be overdrawn by later ones (wall_band intentionally overdraws
+  // the depth_band methanogenic_core along the slanted walls).
+  if (zoneSpec) {
+    parts.push(`<g class="zone-overlay">`);
+    for (const id of Object.keys(zoneSpec)) {
+      const z = zoneSpec[id];
+      const cls = `zone-${z.color_visual}`;
+      const stroke = z.boundary_style === "solid" ? "zone-boundary-solid" : (z.boundary_style === "none" ? "" : "zone-boundary-dashed");
+      if (z.position_class === "depth_band") {
+        // Polygon: 4 vertices (top-left, top-right, bottom-right, bottom-left)
+        // at the requested depth fractions, restricted to the radial extent.
+        const yTopM = cellTopYM + z.geometry.depth_frac_top * cfg.cellDepthM;
+        const yBotM = cellTopYM + z.geometry.depth_frac_bottom * cfg.cellDepthM;
+        const wTop = widthAtDepth(z.geometry.depth_frac_top * cfg.cellDepthM);
+        const wBot = widthAtDepth(z.geometry.depth_frac_bottom * cfg.cellDepthM);
+        const cxM = cfg.nativeFlankWidthM + cfg.cellTopWidthM / 2;
+        const halfTop = (wTop.rightXM - wTop.leftXM) * z.geometry.radial_extent_frac / 2;
+        const halfBot = (wBot.rightXM - wBot.leftXM) * z.geometry.radial_extent_frac / 2;
+        const poly = [
+          `${X(cxM - halfTop)},${Y(yTopM)}`,
+          `${X(cxM + halfTop)},${Y(yTopM)}`,
+          `${X(cxM + halfBot)},${Y(yBotM)}`,
+          `${X(cxM - halfBot)},${Y(yBotM)}`,
+        ].join(" ");
+        parts.push(`<polygon class="${cls} ${stroke}" points="${poly}" />`);
+      } else if (z.position_class === "wall_band") {
+        // Two slanted bands, one per wall. At each depth, the band hugs the
+        // wall on its outer edge and inset_m to the interior on its inner edge.
+        // Approximation: horizontal offset by inset_m (not strictly perpendicular
+        // to the slanted wall — close enough for a 12 m / 30 m slope).
+        const inset = z.geometry.inset_m;
+        // Left wall: from (cellLeftXTopM, cellTopYM) to (cellLeftXBotM, cellBotYM)
+        const leftPoly = [
+          `${X(cellLeftXTopM)},${Y(cellTopYM)}`,
+          `${X(cellLeftXTopM + inset)},${Y(cellTopYM)}`,
+          `${X(cellLeftXBotM + inset)},${Y(cellBotYM)}`,
+          `${X(cellLeftXBotM)},${Y(cellBotYM)}`,
+        ].join(" ");
+        const rightPoly = [
+          `${X(cellRightXTopM - inset)},${Y(cellTopYM)}`,
+          `${X(cellRightXTopM)},${Y(cellTopYM)}`,
+          `${X(cellRightXBotM)},${Y(cellBotYM)}`,
+          `${X(cellRightXBotM - inset)},${Y(cellBotYM)}`,
+        ].join(" ");
+        parts.push(`<polygon class="${cls} ${stroke}" points="${leftPoly}" />`);
+        parts.push(`<polygon class="${cls} ${stroke}" points="${rightPoly}" />`);
+      } else if (z.position_class === "bottom_strip") {
+        // Re-tints the existing engineered LCS layer with the zone's chemistry.
+        // The LCS sits at cellBotYM - lowerLayersM, thicknessM = lowerLayers[0].thicknessM.
+        const yTopM = cellBotYM - cfg.lowerLayers.reduce((s, l) => s + l.thicknessM, 0);
+        const tM = cfg.lowerLayers[0].thicknessM;
+        const wTop = widthAtDepth(yTopM - cellTopYM);
+        const wBot = widthAtDepth(yTopM - cellTopYM + tM);
+        const poly = [
+          `${X(wTop.leftXM)},${Y(yTopM)}`,
+          `${X(wTop.rightXM)},${Y(yTopM)}`,
+          `${X(wBot.rightXM)},${Y(yTopM + tM)}`,
+          `${X(wBot.leftXM)},${Y(yTopM + tM)}`,
+        ].join(" ");
+        parts.push(`<polygon class="${cls} ${stroke}" points="${poly}" />`);
+      }
+    }
+
+    // Zone labels — second pass, drawn after polygons so they sit on top.
+    // Placement strategy: depth_band → centered horizontally on the zone, just
+    // below the zone's top edge; wall_band → left wall flank, at the band's
+    // mid-depth, sized to fit the narrow band; bottom_strip → skipped (relies
+    // on the existing right-side LCS layer-label).
+    for (const id of Object.keys(zoneSpec)) {
+      const z = zoneSpec[id];
+      const cls = `zone-label zone-label-${z.color_visual}`;
+      if (z.position_class === "depth_band") {
+        const yTopM = cellTopYM + z.geometry.depth_frac_top * cfg.cellDepthM;
+        const cxM = cfg.nativeFlankWidthM + cfg.cellTopWidthM / 2;
+        // Label sits just below the zone's top edge, centered horizontally.
+        parts.push(`<text class="${cls}" x="${X(cxM)}" y="${Y(yTopM) + 12}" text-anchor="middle">${z.label}</text>`);
+      } else if (z.position_class === "wall_band") {
+        // Left flank only — right side is reserved for the layer-fan labels.
+        // The flank is only inset_m (~3m → 30 px) wide, narrower than the
+        // label text. text-anchor="start" with x at the flank's INNER edge
+        // (wall + inset + small pad) lets the label extend rightward into
+        // the methanogenic_core for readability while still reading as the
+        // flank's label because its starting edge sits at the flank boundary.
+        const inset = z.geometry.inset_m;
+        const yMidM = cellTopYM + cfg.cellDepthM * 0.5;
+        const wallXMidM = cellLeftXTopM + (cellLeftXBotM - cellLeftXTopM) * 0.5; // x at half-depth
+        const labelXM = wallXMidM + inset + 0.5;
+        parts.push(`<text class="${cls}" x="${X(labelXM)}" y="${Y(yMidM)}" text-anchor="start">${z.label}</text>`);
+      }
+      // bottom_strip: skipped intentionally (LCS layer-label on the right covers it)
+    }
+    parts.push(`</g>`); // end zone-overlay group
   }
 
   parts.push(`</g>`); // end cellClip group
@@ -398,5 +503,36 @@ function svgStyle(): string {
     /* Title block */
     .title    { fill: #d4af37; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 14px; letter-spacing: 0.15em; font-weight: normal; }
     .subtitle { fill: #b48a2c; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 9px; letter-spacing: 0.08em; }
+
+    /* ── Chemistry-zone overlay palette ──
+       Tints sit at low opacity over the lift bands so the blueprint backdrop
+       and the lift-stack greyscale both read through. Boundary strokes are
+       higher-opacity so the zone borders stay legible.
+       Color logic: warm rust = oxidizing top, sulfur yellow = acidic mid,
+       slate blue = methanogenic core, drainage teal = wall flank,
+       deep purple = stable basal, biofilm green = LCS scaling. */
+    .zone-rust_oxidizing_warm  { fill: #b25028; fill-opacity: 0.18; }
+    .zone-sulfur_yellow_acid   { fill: #b49628; fill-opacity: 0.16; }
+    .zone-slate_blue_reducing  { fill: #3c5a82; fill-opacity: 0.22; }
+    .zone-drainage_pale_teal   { fill: #408282; fill-opacity: 0.20; }
+    .zone-deep_purple_stable   { fill: #643c82; fill-opacity: 0.22; }
+    /* Biofilm green sits at higher opacity because it overlays the existing
+       engineered layer-lcs (fill-opacity 0.85), and at 0.30 the green tint
+       washed out under the brown LCS fill. 0.50 lands the LCS as a clearly
+       biofilm-tinted strip distinct from the surrounding geomembrane / clay. */
+    .zone-biofilm_pale_green   { fill: #508c64; fill-opacity: 0.50; }
+
+    .zone-boundary-dashed { stroke: #d4af37; stroke-width: 0.6; stroke-dasharray: 3 2; stroke-opacity: 0.55; }
+    .zone-boundary-solid  { stroke: #d4af37; stroke-width: 0.6; stroke-opacity: 0.65; }
+
+    /* Zone labels — small, in-zone, color-tinted to match the zone palette
+       so each label reads as belonging to its tint. */
+    .zone-label { font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 8px; letter-spacing: 0.10em; }
+    .zone-label-rust_oxidizing_warm { fill: #d8804a; }
+    .zone-label-sulfur_yellow_acid  { fill: #e0c050; }
+    .zone-label-slate_blue_reducing { fill: #80a8d8; }
+    .zone-label-drainage_pale_teal  { fill: #6cb0b0; }
+    .zone-label-deep_purple_stable  { fill: #b078d8; }
+    .zone-label-biofilm_pale_green  { fill: #80c898; }
   </style>`;
 }
