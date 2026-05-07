@@ -102,6 +102,7 @@
     }
     aside#examine-panel .meta span.label { color: #5c4a1a; }
     aside#examine-panel .meta span.divider { color: #3c2e0e; padding: 0 0.6em; }
+    aside#examine-panel .meta span.host-none { color: #6c5418; font-style: italic; }
     aside#examine-panel .paragenesis {
       color: #c0a050;
       white-space: pre-wrap;
@@ -516,15 +517,55 @@ function _sampleZonePoint(zone, geom, rng) {
     // Fallback — shouldn't hit if zone JSON is well-formed.
     return { x_m: geom.nativeFlankWidthM + geom.cellTopWidthM / 2, y_m: geom.cellTopYM + geom.cellDepthM / 2 };
 }
-function generateCrystalDots(scenario, zoneSpec, mineralSpec, geom) {
+// Helpers for v8 item-anchored placement: substrate matching + item-zone test.
+function _substratesMatch(itemTokens, mineralTokens) {
+    for (const t of itemTokens) {
+        if (mineralTokens.indexOf(t) >= 0)
+            return true;
+    }
+    return false;
+}
+// True when the placed item's CENTER falls inside the zone's footprint. Items
+// are placed with x_m/y_m in WORLD-meter coords (per 07-cell-population.ts);
+// zones are defined in cell-local coords, so we subtract the geom origins.
+function _itemInZone(item, zone, geom) {
+    const cellLocalX = item.x_m - geom.nativeFlankWidthM;
+    const cellLocalY = item.y_m - geom.cellTopYM;
+    if (zone.position_class === "depth_band") {
+        const yTop = zone.geometry.depth_frac_top * geom.cellDepthM;
+        const yBot = zone.geometry.depth_frac_bottom * geom.cellDepthM;
+        if (cellLocalY < yTop || cellLocalY > yBot)
+            return false;
+        const t = cellLocalY / geom.cellDepthM;
+        const wAt = geom.cellTopWidthM * (1 - t) + geom.cellBottomWidthM * t;
+        const usableHalfWidth = wAt * zone.geometry.radial_extent_frac / 2;
+        const cellCx = geom.cellTopWidthM / 2;
+        return Math.abs(cellLocalX - cellCx) <= usableHalfWidth;
+    }
+    if (zone.position_class === "wall_band") {
+        const t = cellLocalY / geom.cellDepthM;
+        const wAt = geom.cellTopWidthM * (1 - t) + geom.cellBottomWidthM * t;
+        const leftEdge = (geom.cellTopWidthM - wAt) / 2;
+        const rightEdge = leftEdge + wAt;
+        const inset = zone.geometry.inset_m;
+        return (cellLocalX - leftEdge) <= inset || (rightEdge - cellLocalX) <= inset;
+    }
+    // bottom_strip: items don't get placed in the LCS layer (07-cell-population
+    // confines them to the waste body), so the LCS biofilm zone has no items.
+    return false;
+}
+function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom) {
     const dots = [];
     if (!scenario || !zoneSpec)
         return dots;
+    const itemList = items ?? [];
     const expectedSpecies = scenario.expected_species ?? {};
     for (const mineralId of Object.keys(expectedSpecies)) {
         const speciesEntry = expectedSpecies[mineralId];
         const role = speciesEntry.evidence_role;
         const dotsPerZone = _dotsForRole(role);
+        const mineralEntry = mineralSpec ? mineralSpec[mineralId] : null;
+        const mineralSubstrates = (mineralEntry && mineralEntry.substrate_grows_on) || [];
         // Find which zones reference this mineral in expected_mineral_clusters.
         // Note: NOT filtered by scenario.active_zones — see file header for why.
         for (const zoneId of Object.keys(zoneSpec)) {
@@ -532,17 +573,44 @@ function generateCrystalDots(scenario, zoneSpec, mineralSpec, geom) {
             const cluster = zone.expected_mineral_clusters ?? [];
             if (!cluster.includes(mineralId))
                 continue;
+            // v8: candidate hosts = items in this zone whose substrate_tokens
+            // intersect the mineral's substrate_grows_on. When at least one host
+            // exists, dots anchor to hosts (with small jitter). When none exist
+            // (e.g. lcs_biofilm zone has no items by design; or vocabulary gaps
+            // for some minerals), fall back to zone-uniform placement.
+            const candidateHosts = mineralSubstrates.length > 0
+                ? itemList.filter((it) => _substratesMatch(it.substrate_tokens, mineralSubstrates) && _itemInZone(it, zone, geom))
+                : [];
             const seed = _hashStr(`${scenario.id}|${mineralId}|${zoneId}`);
             const rng = _mulberry32(seed);
             for (let i = 0; i < dotsPerZone; i++) {
-                const pt = _sampleZonePoint(zone, geom, rng);
-                dots.push({
-                    x_m: pt.x_m,
-                    y_m: pt.y_m,
-                    mineral_id: mineralId,
-                    evidence_role: role,
-                    zone_id: zoneId,
-                });
+                if (candidateHosts.length > 0) {
+                    // Round-robin host pick + small jitter inside the host's footprint.
+                    const host = candidateHosts[i % candidateHosts.length];
+                    const jitterX = (rng() - 0.5) * host.w_m * 0.6;
+                    const jitterY = (rng() - 0.5) * host.h_m * 0.6;
+                    dots.push({
+                        x_m: host.x_m + jitterX,
+                        y_m: host.y_m + jitterY,
+                        mineral_id: mineralId,
+                        evidence_role: role,
+                        zone_id: zoneId,
+                        host_item_id: host.id,
+                        host_item_class: host.class_id,
+                    });
+                }
+                else {
+                    const pt = _sampleZonePoint(zone, geom, rng);
+                    dots.push({
+                        x_m: pt.x_m,
+                        y_m: pt.y_m,
+                        mineral_id: mineralId,
+                        evidence_role: role,
+                        zone_id: zoneId,
+                        host_item_id: null,
+                        host_item_class: null,
+                    });
+                }
             }
         }
     }
@@ -777,7 +845,7 @@ function _fallbackNarrative(mineral, available, _zoneId) {
     return `${intro}\n\nFrom this cell's confirmed substrate origins: ${namedSources}. These precursors, under ${phaseToken}-phase chemistry, deliver the ingredients ${mineral.formula} requires. ${mineral.description ?? ""}`;
 }
 // ── Dispatcher ──
-function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec) {
+function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem) {
     const m = { ...(mineralEntry ?? {}), _id: mineralId };
     const { available, absent } = _composeAvailablePrecursors(m, scenario, precursorSpec);
     let paragenesis = "";
@@ -814,6 +882,34 @@ function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, pr
     const speciesEntry = scenario && scenario.expected_species ? scenario.expected_species[mineralId] : null;
     const evidenceRole = speciesEntry ? speciesEntry.evidence_role : "(not in this scenario's expected species)";
     const evidenceNote = speciesEntry ? speciesEntry.note : undefined;
+    // Host-item metadata: appended to the narrative when a specific item
+    // anchors the crystal (v8). Nullable when the dot fell back to zone-uniform
+    // placement (no host substrate matched in this zone).
+    let hostLabel = null;
+    let hostClass = null;
+    let hostId = null;
+    if (hostItem) {
+        hostClass = hostItem.class_id ?? null;
+        hostId = hostItem.id ?? null;
+        // Pull the instance suffix off the id ("lead_acid_battery_3" → "#3").
+        let suffix = "";
+        if (hostId) {
+            const lastUnderscore = hostId.lastIndexOf("_");
+            if (lastUnderscore >= 0)
+                suffix = " #" + hostId.slice(lastUnderscore + 1);
+        }
+        const tilePart = (typeof hostItem.tile_col === "number" && typeof hostItem.tile_row === "number")
+            ? ` at tile (col ${hostItem.tile_col}, row ${hostItem.tile_row})`
+            : "";
+        const niceName = hostItem.display_name ?? (hostClass ? hostClass.replace(/_/g, " ") : "host item");
+        hostLabel = `${niceName}${suffix}${tilePart}`;
+        // Append a host clause to the paragenesis so the prose reads "this
+        // crystal grew on a specific item" rather than abstractly. Only
+        // append when authored — fallback narratives stay catalog-shaped.
+        if (authored) {
+            paragenesis += `\n\nHost surface: ${hostLabel}. The crystal nucleated on this object's substrate (${(hostItem.substrate_tokens ?? []).join(", ")}) where the local chemistry met the mineral's stability window.`;
+        }
+    }
     return {
         mineralId,
         mineralName: _displayMineralName(mineralId),
@@ -827,6 +923,9 @@ function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, pr
         authored,
         available_precursors: available,
         absent_precursors: absent,
+        host_item_label: hostLabel,
+        host_item_class: hostClass,
+        host_item_id: hostId,
     };
 }
 
@@ -1327,7 +1426,51 @@ function generatePlacedItems(scenario, itemSpec, geom) {
 //        of WASTELAND_VERSION-bumping rules — no scenario chemistry has
 //        run yet. The version bump tracks the new data spine arriving
 //        rather than a chemistry change.
-const WASTELAND_VERSION = "v7";
+//   v8 — crystal-to-item host anchoring (2026-05-07): each crystal dot
+//        now inherits a host_item_id by snapping to the matching-substrate
+//        item in its zone. Closes the loop between the four data spines —
+//        minerals × scenarios × zones × items — so paragenesis prose
+//        can name the SPECIFIC host: 'this pyromorphite grew on
+//        lead_acid_battery_3 at tile (col 22, row 18).' The scenario
+//        cells stop being abstract; each crystal points to a particular
+//        battery, fridge, drywall sheet, or rebar bundle.
+//        - js/03-crystal-positions.ts gains _substratesMatch and
+//          _itemInZone helpers. For each (mineral × zone) iteration:
+//          candidate hosts = items in this zone whose substrate_tokens
+//          intersect mineral.substrate_grows_on. When at least one host
+//          exists, dots round-robin across hosts with small jitter
+//          inside the host's footprint. When none exist (lcs_biofilm
+//          zone has no items by design; some minerals have substrate
+//          vocabulary not yet aligned with item tokens), dots fall back
+//          to zone-uniform placement with host_item_id=null.
+//        - data/minerals.json: surgical substrate-vocabulary additions
+//          so vivianite matches rebar items (rebar_steel_scrap added
+//          alongside iron_substrate/rebar_corroded) and malachite
+//          matches copper_wire_bundle items (copper_wiring added
+//          alongside copper_wire/copper_pipe). Other vocabulary gaps
+//          handled by zone-fallback for now.
+//        - js/04-narrators.ts accepts an optional hostItem arg and
+//          appends a 'Host surface: ...' clause to each authored
+//          narrative when a host is provided. CrystalNarrative gains
+//          host_item_label, host_item_class, host_item_id fields.
+//        - js/99-renderer-cross-section.ts threads opts.mineralSpec
+//          into the dot generator; each <circle.dot> emits
+//          data-host-item-id and data-host-item-class. Renderer also
+//          stashes the placed-items list at globalThis.LAST_PLACED_ITEMS
+//          so the boot harness can resolve a clicked dot's host id back
+//          to the full PlacedItem record without re-running the
+//          (deterministic) population pass.
+//        - index.html boot: lookupHostItem(hostId) reads
+//          LAST_PLACED_ITEMS and passes the host record into
+//          narrateCrystal. Examination panel gains a 'host:' meta line;
+//          fallback case shows '(no specific host — zone-fallback
+//          placement)' in muted italic.
+//        Engine implications: with host anchoring in place, future
+//        passes can attach decay state, mining-extraction, and
+//        per-host crystal counts at the item level. The CrystalDot
+//        shape is stable (host fields nullable), so future engine
+//        replacement of the seeded sampler doesn't break the renderer.
+const WASTELAND_VERSION = "v8";
 
 // ── 99-renderer-cross-section.js ──
 
@@ -1392,6 +1535,10 @@ function buildSchematicSVG(cfg, opts) {
     const zoneSpec = opts.zoneSpec ?? null;
     const scenario = opts.scenario ?? null;
     const itemSpec = opts.itemSpec ?? null;
+    const mineralSpec = opts.mineralSpec ?? null;
+    // populationResult is captured here once items render so the crystal-dot
+    // pass downstream can use the same placed items as host-anchor candidates.
+    let placedItemsList = [];
     // Effective zone subset for tinting: when a scenario is selected, only
     // its active_zones render; otherwise (OVERVIEW mode) all zones render.
     // Crystal dot placement uses the FULL zoneSpec regardless — see
@@ -1512,6 +1659,13 @@ function buildSchematicSVG(cfg, opts) {
         };
         const populationResult = generatePlacedItems(scenario, itemSpec, popGeom);
         const items = populationResult.items;
+        placedItemsList = items;
+        // Stash on the global window so the boot harness's click handler can
+        // resolve a clicked dot's data-host-item-id back to the full PlacedItem
+        // record without re-running the (deterministic) population pass.
+        if (typeof globalThis !== "undefined") {
+            globalThis.LAST_PLACED_ITEMS = items;
+        }
         parts.push(`<g class="item-layer">`);
         for (const it of items) {
             const cx = X(it.x_m);
@@ -1655,7 +1809,7 @@ function buildSchematicSVG(cfg, opts) {
             cellTopYM: cellTopYM,
             lcsThicknessM: cfg.lowerLayers[0].thicknessM,
         };
-        const dots = generateCrystalDots(scenario, zoneSpec, null, geom);
+        const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom);
         parts.push(`<g class="crystal-dots">`);
         for (const d of dots) {
             const fill = mineralDotColor(d.mineral_id);
@@ -1666,8 +1820,12 @@ function buildSchematicSVG(cfg, opts) {
                     : 1.6;
             // data-* attributes drive the examination panel's click delegation
             // (boot harness reads them from the click target). cursor: pointer is
-            // applied via CSS so dots indicate they're interactive.
-            parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" />`);
+            // applied via CSS so dots indicate they're interactive. v8: data-host-
+            // item-id and data-host-item-class carry the anchoring item (or empty
+            // strings when the dot fell back to zone-uniform placement).
+            const hostId = d.host_item_id ?? "";
+            const hostClass = d.host_item_class ?? "";
+            parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" />`);
         }
         parts.push(`</g>`); // end crystal-dots group
     }
@@ -2054,6 +2212,7 @@ function svgStyle() {
         var opts = {
           zoneSpec: typeof ZONE_SPEC !== "undefined" ? ZONE_SPEC : null,
           itemSpec: typeof ITEM_SPEC !== "undefined" ? ITEM_SPEC : null,
+          mineralSpec: typeof MINERAL_SPEC !== "undefined" ? MINERAL_SPEC : null,
         };
         if (activeScenarioId && typeof SCENARIO_SPEC !== "undefined" && SCENARIO_SPEC && SCENARIO_SPEC[activeScenarioId]) {
           opts.scenario = SCENARIO_SPEC[activeScenarioId];
@@ -2063,6 +2222,19 @@ function svgStyle() {
         } catch (e) {
           pre.textContent += "\n[ERR] re-render threw: " + (e && e.message ? e.message : e);
         }
+      }
+
+      // Resolve a clicked dot's data-host-item-id back to the full PlacedItem
+      // record stashed by the renderer (window.LAST_PLACED_ITEMS). Returns
+      // null when the dot fell back to zone-uniform placement (host id "").
+      function lookupHostItem(hostItemId) {
+        if (!hostItemId) return null;
+        var list = (typeof LAST_PLACED_ITEMS !== "undefined") ? LAST_PLACED_ITEMS : null;
+        if (!list) return null;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].id === hostItemId) return list[i];
+        }
+        return null;
       }
 
       // Examination-panel click delegation: any crystal dot inside the
@@ -2103,16 +2275,22 @@ function svgStyle() {
           renderIdlePanel("Narrator module not loaded.");
           return;
         }
-        var narrative = narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec);
+        var hostItemId = target.getAttribute("data-host-item-id") || "";
+        var hostItem = lookupHostItem(hostItemId);
+        var narrative = narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem);
         var cellName = scenario && scenario.location ? (scenario.location.locality + ", " + scenario.location.country) : "(no scenario)";
         var citationsHtml = narrative.citations.length
           ? '<div class="citations">citations: ' + narrative.citations.map(escapeHtml).join("; ") + '</div>'
           : "";
+        var hostLine = narrative.host_item_label
+          ? '<span class="divider">|</span><span class="label">host:</span> ' + escapeHtml(narrative.host_item_label)
+          : '<span class="divider">|</span><span class="label">host:</span> <span class="host-none">(no specific host — zone-fallback placement)</span>';
         var evidenceLine = '<span class="label">zone:</span> ' + escapeHtml(narrative.zoneLabel) +
           '<span class="divider">|</span>' +
           '<span class="label">habit:</span> ' + escapeHtml(narrative.habit) +
           '<span class="divider">|</span>' +
-          '<span class="label">evidence:</span> ' + escapeHtml(narrative.evidenceRole);
+          '<span class="label">evidence:</span> ' + escapeHtml(narrative.evidenceRole) +
+          hostLine;
         var fallbackHtml = narrative.authored ? "" :
           '<div class="fallback-note">[ narrator placeholder — per-mineral paragenesis for this catalog entry not yet authored, prose reconstructed from catalog data ]</div>';
 

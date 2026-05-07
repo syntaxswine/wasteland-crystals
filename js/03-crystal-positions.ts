@@ -35,6 +35,8 @@ interface CrystalDot {
   mineral_id: string;
   evidence_role: string;
   zone_id: string;
+  host_item_id: string | null;     // when set, the placed-item this crystal grew on (e.g. "lead_acid_battery_3")
+  host_item_class: string | null;  // class_id of the host item ("lead_acid_battery"); null when no item-anchor
 }
 
 // Per-mineral display color. Tokens come from minerals.json color_visual but
@@ -180,20 +182,66 @@ function _sampleZonePoint(zone: any, geom: CellGeomInput, rng: () => number): { 
   return { x_m: geom.nativeFlankWidthM + geom.cellTopWidthM / 2, y_m: geom.cellTopYM + geom.cellDepthM / 2 };
 }
 
+// Helpers for v8 item-anchored placement: substrate matching + item-zone test.
+
+function _substratesMatch(itemTokens: string[], mineralTokens: string[]): boolean {
+  for (const t of itemTokens) {
+    if (mineralTokens.indexOf(t) >= 0) return true;
+  }
+  return false;
+}
+
+// True when the placed item's CENTER falls inside the zone's footprint. Items
+// are placed with x_m/y_m in WORLD-meter coords (per 07-cell-population.ts);
+// zones are defined in cell-local coords, so we subtract the geom origins.
+function _itemInZone(item: any, zone: any, geom: CellGeomInput): boolean {
+  const cellLocalX = item.x_m - geom.nativeFlankWidthM;
+  const cellLocalY = item.y_m - geom.cellTopYM;
+
+  if (zone.position_class === "depth_band") {
+    const yTop = zone.geometry.depth_frac_top * geom.cellDepthM;
+    const yBot = zone.geometry.depth_frac_bottom * geom.cellDepthM;
+    if (cellLocalY < yTop || cellLocalY > yBot) return false;
+    const t = cellLocalY / geom.cellDepthM;
+    const wAt = geom.cellTopWidthM * (1 - t) + geom.cellBottomWidthM * t;
+    const usableHalfWidth = wAt * zone.geometry.radial_extent_frac / 2;
+    const cellCx = geom.cellTopWidthM / 2;
+    return Math.abs(cellLocalX - cellCx) <= usableHalfWidth;
+  }
+
+  if (zone.position_class === "wall_band") {
+    const t = cellLocalY / geom.cellDepthM;
+    const wAt = geom.cellTopWidthM * (1 - t) + geom.cellBottomWidthM * t;
+    const leftEdge = (geom.cellTopWidthM - wAt) / 2;
+    const rightEdge = leftEdge + wAt;
+    const inset = zone.geometry.inset_m;
+    return (cellLocalX - leftEdge) <= inset || (rightEdge - cellLocalX) <= inset;
+  }
+
+  // bottom_strip: items don't get placed in the LCS layer (07-cell-population
+  // confines them to the waste body), so the LCS biofilm zone has no items.
+  return false;
+}
+
 function generateCrystalDots(
   scenario: any,
   zoneSpec: { [id: string]: any },
   mineralSpec: { [id: string]: any } | null,
+  items: any[] | null,
   geom: CellGeomInput,
 ): CrystalDot[] {
   const dots: CrystalDot[] = [];
   if (!scenario || !zoneSpec) return dots;
+
+  const itemList = items ?? [];
 
   const expectedSpecies = scenario.expected_species ?? {};
   for (const mineralId of Object.keys(expectedSpecies)) {
     const speciesEntry = expectedSpecies[mineralId];
     const role = speciesEntry.evidence_role;
     const dotsPerZone = _dotsForRole(role);
+    const mineralEntry = mineralSpec ? mineralSpec[mineralId] : null;
+    const mineralSubstrates: string[] = (mineralEntry && mineralEntry.substrate_grows_on) || [];
 
     // Find which zones reference this mineral in expected_mineral_clusters.
     // Note: NOT filtered by scenario.active_zones — see file header for why.
@@ -202,18 +250,45 @@ function generateCrystalDots(
       const cluster: string[] = zone.expected_mineral_clusters ?? [];
       if (!cluster.includes(mineralId)) continue;
 
+      // v8: candidate hosts = items in this zone whose substrate_tokens
+      // intersect the mineral's substrate_grows_on. When at least one host
+      // exists, dots anchor to hosts (with small jitter). When none exist
+      // (e.g. lcs_biofilm zone has no items by design; or vocabulary gaps
+      // for some minerals), fall back to zone-uniform placement.
+      const candidateHosts: any[] = mineralSubstrates.length > 0
+        ? itemList.filter((it) => _substratesMatch(it.substrate_tokens, mineralSubstrates) && _itemInZone(it, zone, geom))
+        : [];
+
       const seed = _hashStr(`${scenario.id}|${mineralId}|${zoneId}`);
       const rng = _mulberry32(seed);
 
       for (let i = 0; i < dotsPerZone; i++) {
-        const pt = _sampleZonePoint(zone, geom, rng);
-        dots.push({
-          x_m: pt.x_m,
-          y_m: pt.y_m,
-          mineral_id: mineralId,
-          evidence_role: role,
-          zone_id: zoneId,
-        });
+        if (candidateHosts.length > 0) {
+          // Round-robin host pick + small jitter inside the host's footprint.
+          const host = candidateHosts[i % candidateHosts.length];
+          const jitterX = (rng() - 0.5) * host.w_m * 0.6;
+          const jitterY = (rng() - 0.5) * host.h_m * 0.6;
+          dots.push({
+            x_m: host.x_m + jitterX,
+            y_m: host.y_m + jitterY,
+            mineral_id: mineralId,
+            evidence_role: role,
+            zone_id: zoneId,
+            host_item_id: host.id,
+            host_item_class: host.class_id,
+          });
+        } else {
+          const pt = _sampleZonePoint(zone, geom, rng);
+          dots.push({
+            x_m: pt.x_m,
+            y_m: pt.y_m,
+            mineral_id: mineralId,
+            evidence_role: role,
+            zone_id: zoneId,
+            host_item_id: null,
+            host_item_class: null,
+          });
+        }
       }
     }
   }

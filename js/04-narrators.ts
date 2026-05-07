@@ -47,6 +47,9 @@ interface CrystalNarrative {
   authored: boolean;
   available_precursors: AvailablePrecursor[];   // precursors whose source_substrate IS in the cell's inventory
   absent_precursors: string[];                   // precursor IDs named in mineral.decay_precursor whose source_substrate is NOT in inventory (so the narrative omitted them)
+  host_item_label: string | null;                // human-readable host item line ("lead-acid battery #3 at tile (col 22, row 18)") or null when the dot fell back to zone-uniform placement
+  host_item_class: string | null;
+  host_item_id: string | null;
 }
 
 function _displayMineralName(id: string): string {
@@ -292,6 +295,7 @@ function narrateCrystal(
   mineralEntry: any,
   zoneEntry: any,
   precursorSpec: { [id: string]: any } | null,
+  hostItem?: any | null,
 ): CrystalNarrative {
   const m = { ...(mineralEntry ?? {}), _id: mineralId };
   const { available, absent } = _composeAvailablePrecursors(m, scenario, precursorSpec);
@@ -317,6 +321,34 @@ function narrateCrystal(
   const evidenceRole = speciesEntry ? speciesEntry.evidence_role : "(not in this scenario's expected species)";
   const evidenceNote = speciesEntry ? speciesEntry.note : undefined;
 
+  // Host-item metadata: appended to the narrative when a specific item
+  // anchors the crystal (v8). Nullable when the dot fell back to zone-uniform
+  // placement (no host substrate matched in this zone).
+  let hostLabel: string | null = null;
+  let hostClass: string | null = null;
+  let hostId: string | null = null;
+  if (hostItem) {
+    hostClass = hostItem.class_id ?? null;
+    hostId = hostItem.id ?? null;
+    // Pull the instance suffix off the id ("lead_acid_battery_3" → "#3").
+    let suffix = "";
+    if (hostId) {
+      const lastUnderscore = hostId.lastIndexOf("_");
+      if (lastUnderscore >= 0) suffix = " #" + hostId.slice(lastUnderscore + 1);
+    }
+    const tilePart = (typeof hostItem.tile_col === "number" && typeof hostItem.tile_row === "number")
+      ? ` at tile (col ${hostItem.tile_col}, row ${hostItem.tile_row})`
+      : "";
+    const niceName = hostItem.display_name ?? (hostClass ? hostClass.replace(/_/g, " ") : "host item");
+    hostLabel = `${niceName}${suffix}${tilePart}`;
+    // Append a host clause to the paragenesis so the prose reads "this
+    // crystal grew on a specific item" rather than abstractly. Only
+    // append when authored — fallback narratives stay catalog-shaped.
+    if (authored) {
+      paragenesis += `\n\nHost surface: ${hostLabel}. The crystal nucleated on this object's substrate (${(hostItem.substrate_tokens ?? []).join(", ")}) where the local chemistry met the mineral's stability window.`;
+    }
+  }
+
   return {
     mineralId,
     mineralName: _displayMineralName(mineralId),
@@ -330,5 +362,8 @@ function narrateCrystal(
     authored,
     available_precursors: available,
     absent_precursors: absent,
+    host_item_label: hostLabel,
+    host_item_class: hostClass,
+    host_item_id: hostId,
   };
 }

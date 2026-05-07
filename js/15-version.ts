@@ -208,4 +208,49 @@
 //        run yet. The version bump tracks the new data spine arriving
 //        rather than a chemistry change.
 
-const WASTELAND_VERSION = "v7";
+//   v8 — crystal-to-item host anchoring (2026-05-07): each crystal dot
+//        now inherits a host_item_id by snapping to the matching-substrate
+//        item in its zone. Closes the loop between the four data spines —
+//        minerals × scenarios × zones × items — so paragenesis prose
+//        can name the SPECIFIC host: 'this pyromorphite grew on
+//        lead_acid_battery_3 at tile (col 22, row 18).' The scenario
+//        cells stop being abstract; each crystal points to a particular
+//        battery, fridge, drywall sheet, or rebar bundle.
+//        - js/03-crystal-positions.ts gains _substratesMatch and
+//          _itemInZone helpers. For each (mineral × zone) iteration:
+//          candidate hosts = items in this zone whose substrate_tokens
+//          intersect mineral.substrate_grows_on. When at least one host
+//          exists, dots round-robin across hosts with small jitter
+//          inside the host's footprint. When none exist (lcs_biofilm
+//          zone has no items by design; some minerals have substrate
+//          vocabulary not yet aligned with item tokens), dots fall back
+//          to zone-uniform placement with host_item_id=null.
+//        - data/minerals.json: surgical substrate-vocabulary additions
+//          so vivianite matches rebar items (rebar_steel_scrap added
+//          alongside iron_substrate/rebar_corroded) and malachite
+//          matches copper_wire_bundle items (copper_wiring added
+//          alongside copper_wire/copper_pipe). Other vocabulary gaps
+//          handled by zone-fallback for now.
+//        - js/04-narrators.ts accepts an optional hostItem arg and
+//          appends a 'Host surface: ...' clause to each authored
+//          narrative when a host is provided. CrystalNarrative gains
+//          host_item_label, host_item_class, host_item_id fields.
+//        - js/99-renderer-cross-section.ts threads opts.mineralSpec
+//          into the dot generator; each <circle.dot> emits
+//          data-host-item-id and data-host-item-class. Renderer also
+//          stashes the placed-items list at globalThis.LAST_PLACED_ITEMS
+//          so the boot harness can resolve a clicked dot's host id back
+//          to the full PlacedItem record without re-running the
+//          (deterministic) population pass.
+//        - index.html boot: lookupHostItem(hostId) reads
+//          LAST_PLACED_ITEMS and passes the host record into
+//          narrateCrystal. Examination panel gains a 'host:' meta line;
+//          fallback case shows '(no specific host — zone-fallback
+//          placement)' in muted italic.
+//        Engine implications: with host anchoring in place, future
+//        passes can attach decay state, mining-extraction, and
+//        per-host crystal counts at the item level. The CrystalDot
+//        shape is stable (host fields nullable), so future engine
+//        replacement of the seeded sampler doesn't break the renderer.
+
+const WASTELAND_VERSION = "v8";

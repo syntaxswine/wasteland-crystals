@@ -96,6 +96,7 @@ interface RenderOpts {
   zoneSpec?: ZoneSpecMap | null;
   scenario?: any | null;  // ScenarioEntry from 01-scenario-spec; when set, zones filter to scenario.active_zones and crystal dots render
   itemSpec?: { [id: string]: any } | null;  // ItemClassEntry map from 06-item-spec; when set with scenario, items render
+  mineralSpec?: { [id: string]: any } | null;  // MineralEntry map from 00-mineral-spec; used by the dot generator for substrate-aware host anchoring (v8)
 }
 
 function renderCrossSectionInto(container: HTMLElement, opts?: RenderOpts): void {
@@ -108,6 +109,10 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
   const zoneSpec = opts.zoneSpec ?? null;
   const scenario = opts.scenario ?? null;
   const itemSpec = opts.itemSpec ?? null;
+  const mineralSpec = opts.mineralSpec ?? null;
+  // populationResult is captured here once items render so the crystal-dot
+  // pass downstream can use the same placed items as host-anchor candidates.
+  let placedItemsList: any[] = [];
   // Effective zone subset for tinting: when a scenario is selected, only
   // its active_zones render; otherwise (OVERVIEW mode) all zones render.
   // Crystal dot placement uses the FULL zoneSpec regardless — see
@@ -246,6 +251,13 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
     };
     const populationResult = generatePlacedItems(scenario, itemSpec, popGeom);
     const items = populationResult.items;
+    placedItemsList = items;
+    // Stash on the global window so the boot harness's click handler can
+    // resolve a clicked dot's data-host-item-id back to the full PlacedItem
+    // record without re-running the (deterministic) population pass.
+    if (typeof (globalThis as any) !== "undefined") {
+      (globalThis as any).LAST_PLACED_ITEMS = items;
+    }
     parts.push(`<g class="item-layer">`);
     for (const it of items) {
       const cx = X(it.x_m);
@@ -387,7 +399,7 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
       cellTopYM: cellTopYM,
       lcsThicknessM: cfg.lowerLayers[0].thicknessM,
     };
-    const dots = generateCrystalDots(scenario, zoneSpec, null, geom);
+    const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom);
     parts.push(`<g class="crystal-dots">`);
     for (const d of dots) {
       const fill = mineralDotColor(d.mineral_id);
@@ -398,8 +410,12 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
               : 1.6;
       // data-* attributes drive the examination panel's click delegation
       // (boot harness reads them from the click target). cursor: pointer is
-      // applied via CSS so dots indicate they're interactive.
-      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" />`);
+      // applied via CSS so dots indicate they're interactive. v8: data-host-
+      // item-id and data-host-item-class carry the anchoring item (or empty
+      // strings when the dot fell back to zone-uniform placement).
+      const hostId = d.host_item_id ?? "";
+      const hostClass = d.host_item_class ?? "";
+      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" />`);
     }
     parts.push(`</g>`); // end crystal-dots group
   }
