@@ -119,4 +119,45 @@
 //        ([OVERVIEW] [MONT-SAINT-GUIBERT] [HALBENRAIN]); clicking
 //        re-renders. OVERVIEW shows all zones, no crystals.
 
-const WASTELAND_VERSION = "v5";
+//   v6 — narrator + precursor-origin spine (2026-05-07): clicking a
+//        crystal opens an examination panel that renders the mineral's
+//        paragenesis as a causal chain, composed from data-tagged
+//        precursor origins. The boss's framing: 'when examining the
+//        crystal you get the paragenesis. something like "acids from
+//        x broke down the copper from x which redeposited and formed
+//        malachite"'. Boss follow-up: 'i think the units of precursor
+//        chemicals will have to have origins attached to them to get
+//        an accurate paragenesis.' Implementation:
+//        - data/precursors.json — 21 precursor entries, each tagged
+//          with source_substrate (matching scenarios.json substrate_
+//          inventory tokens), chemical species, decay_mechanism, and
+//          phase_window. The narrator looks up each precursor in
+//          mineral.decay_precursor against this spec.
+//        - scenarios.json substrate_inventory entries gain
+//          evidence_basis: 'documented' | 'implied_typical_msw'. Both
+//          MSG and Halbenrain expanded with typical-MSW substrates
+//          (drywall_gypsum, pvc_plastic, copper_wiring, rebar_steel_
+//          scrap) tagged as implied — required to deliver the
+//          chemistry the cited papers describe but not specifically
+//          characterized at either site.
+//        - js/04-narrators.ts rewritten to compose paragenesis from
+//          (mineral.decay_precursor) ∩ (PRECURSOR_SPEC) ∩ (scenario.
+//          substrate_inventory). Per-mineral narrators (8 authored:
+//          pyromorphite, sphalerite, anglesite, calcite, vivianite,
+//          malachite, goslarite, struvite) name only confirmed
+//          precursors; implied substrates get hedged language ('likely
+//          drywall-derived sulfate'). Other minerals fall through to
+//          a templated narrative built from their available precursors.
+//        - js/99-renderer-cross-section.ts adds data-mineral-id /
+//          data-zone-id / data-evidence-role attrs to each dot;
+//          .selected class halos the examined crystal.
+//        - index.html: aside#examine-panel below schematic, click
+//          delegation on schematic-container, in-panel rendering of
+//          PRECURSOR ORIGINS (with documented/implied basis tags) and
+//          PRECURSORS OMITTED (substrates not in this cell's inventory).
+//        Engine implications: the narrator subsystem is the seed of
+//        the per-mineral narrators called out in PROPOSAL §"Per-mineral
+//        narrators" — same data shape (mineral × scenario × zone) that
+//        the per-step growth narrators will eventually consume.
+
+const WASTELAND_VERSION = "v6";

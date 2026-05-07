@@ -49,8 +49,11 @@ interface ScenarioLocation {
   locality: string;
 }
 
+type SubstrateEvidenceBasis = "documented" | "implied_typical_msw";
+
 interface SubstrateInventoryItem {
   token: string;
+  evidence_basis?: SubstrateEvidenceBasis;
   note: string;
 }
 

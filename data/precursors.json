@@ -1,0 +1,204 @@
+{
+  "_schema_version": "0.1.0",
+  "_last_updated": "2026-05-07",
+  "_source_of_truth_for": ["js/04-narrators.ts"],
+  "_source_of_truth_note": "Canonical precursor-origin spec for Wasteland Crystals. Per the boss's 2026-05-07 note: 'i think the units of precursor chemicals will have to have origins attached to them to get an accurate paragenesis.' Each precursor token (used in minerals.json decay_precursor arrays) is mapped here to its source substrate, the chemical species it delivers, and the decay mechanism by which the substrate releases it. Narrators (js/04-narrators.ts) compose paragenesis from a scenario's substrate_inventory ∩ mineral.decay_precursor → precursor.source_substrate, naming only origins the cited papers (or 'implied typical MSW' fallback) actually support.",
+
+  "_schema": {
+    "id": "Slug matching the dictionary key. Same token used in minerals.json decay_precursor arrays.",
+    "species": "Chemical species delivered (e.g., 'SO4²⁻', 'HCl', 'Pb²⁺', 'biogenic H2S'). Plain-text — used in narrator prose.",
+    "source_substrate": "Substrate token from scenarios.json substrate_inventory and minerals.json substrate_grows_on. Narrators check this against the active scenario's inventory before naming this precursor as a confirmed source.",
+    "decay_mechanism": "1-2 sentences describing how the source substrate releases this precursor. Used in narrator prose as the explanatory clause.",
+    "phase_window": "Leachate phases during which this precursor is most actively delivered. Used by narrators to position the precursor in the scenario's phase timeline.",
+    "narrator_phrase_short": "Compact phrase for inline narrator use ('drywall-derived sulfate', 'battery-electrolyte sulfuric acid'). Lets the narrator name the precursor's origin in prose without the full mechanism."
+  },
+
+  "_audit_summary": {
+    "total_precursors": 20,
+    "_notes": "v0.1.0 precursor spine. Covers the precursor tokens currently referenced in minerals.json decay_precursor arrays plus the narrator-needed acid + chloride + phosphate + carbonate + iron + zinc + copper sources. Each precursor's source_substrate is tagged so narrators can validate against the scenario's substrate_inventory. NOTE: cement_calcite and concrete_calcite coexist as historical near-duplicate tokens in minerals.json — both map to source_substrate=concrete_demolition; rationalizing them is a future minerals.json schema cleanup task. NOT YET COVERED: secondary-redox-cycling precursors (biogenic H2S re-oxidation in burn halos, Fe²⁺/Fe³⁺ flipping, etc.), and atmospheric inputs (rainfall SO4 trace, CO2 dissolution). Slated for v0.2.0 with the burn-zone scenario."
+  },
+
+  "precursors": {
+
+    "drywall_sulfate": {
+      "id": "drywall_sulfate",
+      "species": "SO4²⁻",
+      "source_substrate": "drywall_gypsum",
+      "decay_mechanism": "Slow dissolution of CaSO4·2H2O under leachate flow. Drywall is the dominant SO4 source in mature MSW cells once battery acid has been consumed.",
+      "phase_window": ["acid", "methanogenic"],
+      "narrator_phrase_short": "drywall-derived sulfate"
+    },
+
+    "battery_h2so4": {
+      "id": "battery_h2so4",
+      "species": "H2SO4",
+      "source_substrate": "lead_acid_battery",
+      "decay_mechanism": "Sulfuric-acid electrolyte release after polypropylene casing splits. Aggressive but short-lived — the battery's acid load is exhausted within the cell's first decade.",
+      "phase_window": ["acid"],
+      "narrator_phrase_short": "battery-electrolyte sulfuric acid"
+    },
+
+    "pvc_hcl": {
+      "id": "pvc_hcl",
+      "species": "HCl",
+      "source_substrate": "pvc_plastic",
+      "decay_mechanism": "Thermal and chemical PVC degradation; HCl release becomes detectable around 40 yrs and continues over century-scale.",
+      "phase_window": ["methanogenic", "stable"],
+      "narrator_phrase_short": "PVC-decay chloride"
+    },
+
+    "pvc_hcl_attack_on_zn": {
+      "id": "pvc_hcl_attack_on_zn",
+      "species": "HCl + ZnCl2",
+      "source_substrate": "pvc_plastic",
+      "decay_mechanism": "PVC-released HCl attacks adjacent galvanized substrate, mobilizing Zn²⁺ as ZnCl2; the chloride brine that drives goslarite/simonkolleite precipitation.",
+      "phase_window": ["acid", "methanogenic"],
+      "narrator_phrase_short": "PVC-derived chloride brine on galvanizing"
+    },
+
+    "food_phosphate": {
+      "id": "food_phosphate",
+      "species": "PO4³⁻",
+      "source_substrate": "organic_slurry",
+      "decay_mechanism": "Food-waste decomposition delivers PO4 from biological tissue, bone fragments, and detergent residue.",
+      "phase_window": ["acid", "methanogenic", "stable"],
+      "narrator_phrase_short": "food-waste phosphate"
+    },
+
+    "organic_co2": {
+      "id": "organic_co2",
+      "species": "CO2 / HCO3⁻",
+      "source_substrate": "organic_slurry",
+      "decay_mechanism": "Methanogenesis end-products convert residual VFAs to bicarbonate; the late-phase pH neutralizer.",
+      "phase_window": ["methanogenic", "stable"],
+      "narrator_phrase_short": "methanogenic bicarbonate"
+    },
+
+    "organic_reduction": {
+      "id": "organic_reduction",
+      "species": "reducing potential",
+      "source_substrate": "organic_slurry",
+      "decay_mechanism": "Bulk anaerobic decomposition supplies the electron flux that runs sulfate-reducers, methanogens, and iron-reducers in the methanogenic core.",
+      "phase_window": ["methanogenic"],
+      "narrator_phrase_short": "anaerobic reducing chemistry"
+    },
+
+    "concrete_calcite": {
+      "id": "concrete_calcite",
+      "species": "Ca²⁺ + HCO3⁻",
+      "source_substrate": "concrete_demolition",
+      "decay_mechanism": "Slow dissolution of cement under acidogenic VFAs and later carbonic-acid ingress. The dominant Ca source in C&D-bearing cells.",
+      "phase_window": ["methanogenic", "stable", "alkaline_cap"],
+      "narrator_phrase_short": "concrete-derived calcium"
+    },
+
+    "rebar_iron": {
+      "id": "rebar_iron",
+      "species": "Fe²⁺",
+      "source_substrate": "rebar_steel_scrap",
+      "decay_mechanism": "Anaerobic corrosion of steel reinforcement and white-goods scrap under reducing leachate.",
+      "phase_window": ["methanogenic"],
+      "narrator_phrase_short": "rebar-derived ferrous iron"
+    },
+
+    "drywall_sulfate_to_biogenic_h2s": {
+      "id": "drywall_sulfate_to_biogenic_h2s",
+      "species": "biogenic H2S",
+      "source_substrate": "drywall_gypsum",
+      "decay_mechanism": "Drywall SO4 reduced to S²⁻ by anaerobic sulfate-reducers in the methanogenic phase; the engine of the cell's sulfide chemistry.",
+      "phase_window": ["methanogenic"],
+      "narrator_phrase_short": "biogenic H₂S from sulfate-reducer activity on drywall sulfate"
+    },
+
+    "battery_sulfate_to_biogenic_h2s": {
+      "id": "battery_sulfate_to_biogenic_h2s",
+      "species": "biogenic H2S",
+      "source_substrate": "lead_acid_battery",
+      "decay_mechanism": "Battery-electrolyte SO4, after metals are sequestered by acidic-phase precipitation, becomes substrate for sulfate-reducers in the subsequent methanogenic phase.",
+      "phase_window": ["methanogenic"],
+      "narrator_phrase_short": "biogenic H₂S from sulfate-reducer activity on residual battery sulfate"
+    },
+
+    "copper_wiring_dissolution": {
+      "id": "copper_wiring_dissolution",
+      "species": "Cu²⁺",
+      "source_substrate": "copper_wiring",
+      "decay_mechanism": "Acidic leachate (organic VFAs + battery acid) attacks copper wiring buried in PCB scrap, motor stator coils, and electrical fittings. Cu²⁺ migrates with drainage chemistry rather than reacting in the methanogenic core's sulfide trap.",
+      "phase_window": ["acid", "methanogenic"],
+      "narrator_phrase_short": "Cu²⁺ leached from buried copper wiring"
+    },
+
+    "galvanized_zinc_dissolution": {
+      "id": "galvanized_zinc_dissolution",
+      "species": "Zn²⁺",
+      "source_substrate": "galvanized_steel",
+      "decay_mechanism": "Acidic leachate corrodes the zinc layer of galvanized fines, ductwork, and appliance shells. Major Zn source in any MSW cell.",
+      "phase_window": ["acid", "methanogenic"],
+      "narrator_phrase_short": "Zn²⁺ from galvanized-steel corrosion"
+    },
+
+    "battery_lead_dissolution": {
+      "id": "battery_lead_dissolution",
+      "species": "Pb²⁺",
+      "source_substrate": "lead_acid_battery",
+      "decay_mechanism": "Lead-acid battery plates, after the polypropylene casing splits, expose metallic Pb to acidic SO4-bearing leachate. Pb²⁺ + SO4²⁻ → anglesite is the first-stage Pb fate; mobilized Pb that escapes that trap becomes the pyromorphite-bound deep-cell Pb.",
+      "phase_window": ["acid", "methanogenic"],
+      "narrator_phrase_short": "Pb²⁺ from lead-acid battery plates"
+    },
+
+    "cement_calcite": {
+      "id": "cement_calcite",
+      "species": "Ca²⁺ + HCO3⁻",
+      "source_substrate": "concrete_demolition",
+      "decay_mechanism": "Cement matrix dissolution under acidogenic VFAs and later carbonic-acid ingress. Functionally equivalent to concrete_calcite — the two tokens coexist in minerals.json as historical near-duplicates and share their source substrate.",
+      "phase_window": ["methanogenic", "stable", "alkaline_cap"],
+      "narrator_phrase_short": "cement-derived calcium carbonate"
+    },
+
+    "biogenic_carbonate": {
+      "id": "biogenic_carbonate",
+      "species": "HCO3⁻",
+      "source_substrate": "organic_slurry",
+      "decay_mechanism": "Methanogenesis end-products and microbial respiration deliver bicarbonate; the late-phase pH neutralizer that drives calcite stability.",
+      "phase_window": ["methanogenic", "stable"],
+      "narrator_phrase_short": "biogenic bicarbonate from methanogenic respiration"
+    },
+
+    "protein_nh4": {
+      "id": "protein_nh4",
+      "species": "NH4⁺",
+      "source_substrate": "organic_slurry",
+      "decay_mechanism": "Protein and animal-product decomposition delivers ammonium. Pulse rates track the cell's hydraulic loading.",
+      "phase_window": ["methanogenic"],
+      "narrator_phrase_short": "ammonium from protein decomposition"
+    },
+
+    "drywall_mg": {
+      "id": "drywall_mg",
+      "species": "Mg²⁺",
+      "source_substrate": "drywall_gypsum",
+      "decay_mechanism": "Drywall and calcareous fines release Mg²⁺ alongside Ca²⁺ at slow rates. The Mg supply that lets struvite stabilize at the LCS biofilm.",
+      "phase_window": ["methanogenic", "stable"],
+      "narrator_phrase_short": "drywall-released magnesium"
+    },
+
+    "manure_phosphate": {
+      "id": "manure_phosphate",
+      "species": "PO4³⁻",
+      "source_substrate": "manure_layer",
+      "decay_mechanism": "Animal-waste fines deliver concentrated PO4 — a sub-set of organic_slurry chemistry but enriched. Source for vivianite at agricultural-derived MSW cells.",
+      "phase_window": ["methanogenic"],
+      "narrator_phrase_short": "manure-derived phosphate"
+    },
+
+    "tire_pyrolysis_zns_char": {
+      "id": "tire_pyrolysis_zns_char",
+      "species": "ZnS-rich char",
+      "source_substrate": "tire_pile_burn_residue",
+      "decay_mechanism": "Tire-pile fires pyrolyze the rubber matrix and concentrate ZnS in the post-burn char. Where this char migrates into the active methanogenic chemistry, sphalerite recrystallizes from the char's sulfide reservoir.",
+      "phase_window": ["burn_zone", "methanogenic"],
+      "narrator_phrase_short": "ZnS-rich tire-burn char"
+    }
+
+  }
+}

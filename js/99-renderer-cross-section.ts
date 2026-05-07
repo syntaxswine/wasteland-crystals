@@ -354,7 +354,10 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
       const r = d.evidence_role === "directly_observed" ? 2.6
               : d.evidence_role === "implied_by_substrate_chemistry" ? 2.0
               : 1.6;
-      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" />`);
+      // data-* attributes drive the examination panel's click delegation
+      // (boot harness reads them from the click target). cursor: pointer is
+      // applied via CSS so dots indicate they're interactive.
+      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" />`);
     }
     parts.push(`</g>`); // end crystal-dots group
   }
@@ -594,9 +597,12 @@ function svgStyle(): string {
        a subtle white halo to signal the strongest evidence pedigree;
        implied / predicted are unhaloed so the tier difference reads at
        a glance. */
-    .dot { stroke: #0a0a0a; stroke-width: 0.4; stroke-opacity: 0.9; }
+    .dot { stroke: #0a0a0a; stroke-width: 0.4; stroke-opacity: 0.9; cursor: pointer; }
     .dot-directly_observed              { stroke: #ffffff; stroke-width: 0.45; stroke-opacity: 0.55; }
     .dot-implied_by_substrate_chemistry { /* default outline only */ }
     .dot-predicted_from_program_synthesis { stroke-opacity: 0.5; }
+    /* Selected dot — a brighter halo so the examined crystal reads at a
+       glance against the cell's other paragenesis. */
+    .dot.selected { stroke: #ffd76a; stroke-width: 1.2; stroke-opacity: 1.0; }
   </style>`;
 }
