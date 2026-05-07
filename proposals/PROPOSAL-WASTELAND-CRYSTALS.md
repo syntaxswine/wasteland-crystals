@@ -620,3 +620,79 @@ boss memory file `feedback_anticipatory_proposals.md` for the
 collaboration style.
 
 Welcome to the project. The Anthropocene needs a mineralogist. 🪨🗑️
+
+---
+
+## Update 2026-05-07: Operative narrative frame — mining operation
+
+*Added by the receiving agent during initial implementation. Boss
+observation, captured here so it carries forward into engine and UI
+design.*
+
+The blueprint backdrop the boss chose for the schematic
+(`Style_Referance.png`) depicts landfill-mining infrastructure —
+towers, platforms, pylons descending into the cell. **This is
+load-bearing, not just visual flavor.** Every entry in the catalog
+flagged `evidence_level: "landfill_specific"` comes from literal
+landfill mining:
+
+- **Mont-Saint-Guibert (Belgium)** was excavated by NEW-MINE researchers
+  who pulled core samples and identified the **pyromorphite,
+  sphalerite, metallic Pb, ZnSO₄** that anchor the Pb and Zn
+  chemistry-flip suites — Garcia Lopez et al., *Detritus* 8.
+- **Halbenrain (Austria)** is another NEW-MINE excavation in the same
+  research-program lineage.
+- The broader **ELFM (Enhanced Landfill Mining)** European program is
+  synthesized in Hernandez Parrodi et al. 2021, *Processes* 9:394
+  (doi:10.3390/pr9020394).
+- **MSWI bottom-ash mineralogy** (the source for ettringite, goethite,
+  hydrocalumite, calcite citations) is incinerator-residue chemistry —
+  i.e., burned waste being landfilled and weathering — also a form of
+  waste extraction and processing.
+
+So the schematic isn't a static cross-section diagram. It's a
+**cell under operation**, and the player is a future landfill miner.
+Not an explorer (no terrain to chart), not a curator (no specimens to
+arrange aesthetically), not a fantasy alchemist (no creating). Working
+a cell. The crystals grew over decades-to-centuries in the methanogenic
+phase before the player arrived; the player's verb is *extract* or
+*survey*, not *grow*.
+
+### What this pins down
+
+- **Player role and verb**. Future landfill miner working a cell.
+  Primary verb: extract / survey. The simulator simulates what
+  happened; the game lets the player work through it.
+- **Schematic dynamism**. The cross-section is a site under operation,
+  not a frozen diagram. Infrastructure (gas wells, monitoring wells,
+  leachate pumps, mining shafts) is *deployed*; that implies time
+  progression, extraction events, dynamic cell state.
+- **Scenarios anchor to real ELFM sites**. Mont-Saint-Guibert is the
+  cell that produced the pyromorphite citation; it is the natural
+  first scenario to author. Halbenrain is the natural second.
+  Each scenario becomes "the cell we're working today" rather than
+  "a generic landfill."
+- **Reading list addition** for the receiving agent: the NEW-MINE
+  publication corpus and the ELFM annual conference proceedings
+  (`landfillmining.org`) are the live research community whose
+  observations the simulator's chemistry rests on. When new minerals
+  get added to the catalog, those venues are where the citation
+  hunting starts.
+
+### Aesthetic implication
+
+The cyberpunk-engineering-diagram register the proposal already calls
+for IS the aesthetic of an extractive industry's reporting. Mining
+companies file this kind of cross-section diagram routinely —
+overburden, ore body, infrastructure, extraction levels. Wasteland
+Crystals' schematic should read as **a corporate quarterly report
+from a future landfill-mining operation**: clinical, technical,
+unsentimental, with the post-natural mineralogy as the extraction
+target. That's where the Borges-style narrator register lands: the
+surveyor's voice.
+
+The mining frame doesn't compete with the cyberpunk and
+defer-to-actual-geology principles already in the proposal — it
+sharpens them. *This is the future of resource extraction. The
+resources are the post-natural minerals our garbage has produced
+over the centuries between now and then.*
