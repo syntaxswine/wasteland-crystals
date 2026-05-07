@@ -147,6 +147,7 @@ function generatePlacedItems(
   scenario: any,
   itemSpec: { [id: string]: any } | null,
   geom: CellPopulationGeom,
+  sessionSeed: number = 0,
 ): CellPopulationResult {
   const items: PlacedItem[] = [];
   const occupancy: { [k: string]: string } = {};
@@ -180,7 +181,7 @@ function generatePlacedItems(
     const count = counts[classId];
 
     for (let i = 0; i < count; i++) {
-      const seed = _hashStr07(`${scenario.id}|${classId}|${i}`);
+      const seed = _hashStr07(`${scenario.id}|${classId}|${i}|${sessionSeed}`);
       const rng = _mulberry32_07(seed);
 
       let placedThis = false;

@@ -253,4 +253,38 @@
 //        shape is stable (host fields nullable), so future engine
 //        replacement of the seeded sampler doesn't break the renderer.
 
-const WASTELAND_VERSION = "v8";
+//   v9 — title-screen flow + per-begin random seed (2026-05-07): boss
+//        framing — boot log + button row IS the title screen; clicking a
+//        scenario transitions into a cell view; back button returns. Each
+//        BEGIN press scrambles the layout so the same scenario shows
+//        different appliance/item/crystal positions per session, keeping
+//        chemistry deterministic but physical placement variable.
+//        - index.html structure: body.view-title (default) / body.view-cell
+//          state. Title view shows boot log + BEGIN header + scenario
+//          selector; cell view shows back button + schematic + examination
+//          panel. CSS toggle hides the unused half on each side.
+//        - Buttons reordered: scenarios first (MONT-SAINT-GUIBERT,
+//          HALBENRAIN), OVERVIEW third — primary verbs lead.
+//        - 'BEGIN' header (letter-spaced amber, mining-report register)
+//          contextualizes the buttons as actions.
+//        - Back button '[ ← BEGIN MENU ]' in the cell view returns to
+//          title; clears activeScenarioId and currentSessionSeed.
+//        - currentSessionSeed: number | null — set to a fresh
+//          Math.floor(Math.random() * 1e9) on each BEGIN of a scenario;
+//          mixed into both 07-cell-population's hash (`scenario.id|class_id|
+//          index|sessionSeed`) and 03-crystal-positions's hash
+//          (`scenario.id|mineral_id|zone_id|sessionSeed`) so item placement
+//          AND crystal-dot placement scramble together. OVERVIEW doesn't
+//          render either, so the seed is moot there. Baseline
+//          deterministic (sessionSeed=0) preserved when no seed passed —
+//          the v0–v8 layouts are recoverable.
+//        - page-title element updates between views: 'WASTELAND CRYSTALS —
+//          BOOT' on title, 'WASTELAND CRYSTALS — MONT-SAINT-GUIBERT,
+//          BELGIUM' (or HALBENRAIN, AUSTRIA, or OVERVIEW) on cell.
+//        Engine implications: the seed is structural — future engine
+//        ticks read it as the master RNG seed for any chemistry or
+//        substrate-distribution randomness. Determinism within a session
+//        is preserved (the seed is fixed once BEGIN is pressed); fresh
+//        sessions produce fresh layouts.
+
+const WASTELAND_VERSION = "v9";

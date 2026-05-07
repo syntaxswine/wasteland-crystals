@@ -97,6 +97,7 @@ interface RenderOpts {
   scenario?: any | null;  // ScenarioEntry from 01-scenario-spec; when set, zones filter to scenario.active_zones and crystal dots render
   itemSpec?: { [id: string]: any } | null;  // ItemClassEntry map from 06-item-spec; when set with scenario, items render
   mineralSpec?: { [id: string]: any } | null;  // MineralEntry map from 00-mineral-spec; used by the dot generator for substrate-aware host anchoring (v8)
+  sessionSeed?: number | null;  // mixed into item-placement and crystal-dot hashes so each BEGIN click yields a different physical layout (v9). null = baseline deterministic.
 }
 
 function renderCrossSectionInto(container: HTMLElement, opts?: RenderOpts): void {
@@ -110,6 +111,7 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
   const scenario = opts.scenario ?? null;
   const itemSpec = opts.itemSpec ?? null;
   const mineralSpec = opts.mineralSpec ?? null;
+  const sessionSeed = opts.sessionSeed ?? 0;
   // populationResult is captured here once items render so the crystal-dot
   // pass downstream can use the same placed items as host-anchor candidates.
   let placedItemsList: any[] = [];
@@ -249,7 +251,7 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
       lowerLayersM: lowerLayersMTotal,
       cellTopYM: cellTopYM,
     };
-    const populationResult = generatePlacedItems(scenario, itemSpec, popGeom);
+    const populationResult = generatePlacedItems(scenario, itemSpec, popGeom, sessionSeed);
     const items = populationResult.items;
     placedItemsList = items;
     // Stash on the global window so the boot harness's click handler can
@@ -399,7 +401,7 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
       cellTopYM: cellTopYM,
       lcsThicknessM: cfg.lowerLayers[0].thicknessM,
     };
-    const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom);
+    const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom, sessionSeed);
     parts.push(`<g class="crystal-dots">`);
     for (const d of dots) {
       const fill = mineralDotColor(d.mineral_id);

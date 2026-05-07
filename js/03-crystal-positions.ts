@@ -229,6 +229,7 @@ function generateCrystalDots(
   mineralSpec: { [id: string]: any } | null,
   items: any[] | null,
   geom: CellGeomInput,
+  sessionSeed: number = 0,
 ): CrystalDot[] {
   const dots: CrystalDot[] = [];
   if (!scenario || !zoneSpec) return dots;
@@ -259,7 +260,7 @@ function generateCrystalDots(
         ? itemList.filter((it) => _substratesMatch(it.substrate_tokens, mineralSubstrates) && _itemInZone(it, zone, geom))
         : [];
 
-      const seed = _hashStr(`${scenario.id}|${mineralId}|${zoneId}`);
+      const seed = _hashStr(`${scenario.id}|${mineralId}|${zoneId}|${sessionSeed}`);
       const rng = _mulberry32(seed);
 
       for (let i = 0; i < dotsPerZone; i++) {

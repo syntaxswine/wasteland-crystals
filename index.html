@@ -27,6 +27,54 @@
     }
     .dim { color: #5c4a1a; }
 
+    /* ── View-state toggle ──
+       The page is a two-state machine: title (boot log + BEGIN menu) and
+       cell (schematic + examination panel + back button). body.view-title
+       hides the cell-screen elements; body.view-cell hides the title-screen
+       elements. Default state is title; clicking a BEGIN button transitions
+       to cell; the back button returns to title. */
+    body.view-title #back-nav,
+    body.view-title #schematic-container,
+    body.view-title #examine-panel { display: none; }
+
+    body.view-cell #boot-log,
+    body.view-cell #begin-header,
+    body.view-cell #scenario-selector { display: none; }
+
+    /* BEGIN header — sits above the scenario buttons on the title screen.
+       Same letter-spaced amber register as the section labels in the
+       schematic title block, slightly larger to read as a verb-prompt. */
+    div#begin-header {
+      margin: 1.2em 0 0.5em 0;
+      color: #d4af37;
+      font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+      font-size: 13px;
+      letter-spacing: 0.20em;
+    }
+
+    /* Back navigation — appears at the top of the cell view; styled
+       like the scenario-selector buttons but as a single back-arrow chip. */
+    nav#back-nav {
+      margin: 0.5em 0 0.75em 0;
+      font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+    nav#back-nav button {
+      background: transparent;
+      border: 1px solid #5c4a1a;
+      color: #b48a2c;
+      padding: 0.3em 0.9em;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: inherit;
+      letter-spacing: inherit;
+    }
+    nav#back-nav button:hover {
+      border-color: #d4af37;
+      color: #d4af37;
+    }
+
     /* Scenario selector — boxed cyber-engineering button row sitting above
        the schematic. Active button reverses fill/stroke so it reads as
        'this is the cell currently on the work-table'. */
@@ -199,10 +247,12 @@
     }
   </style>
 </head>
-<body>
-  <h1>WASTELAND CRYSTALS — BOOT</h1>
+<body class="view-title">
+  <h1 id="page-title">WASTELAND CRYSTALS — BOOT</h1>
   <pre id="boot-log">[INIT] no engine loaded yet</pre>
+  <div id="begin-header">BEGIN</div>
   <nav id="scenario-selector"></nav>
+  <nav id="back-nav"><button id="back-btn">[ ← BEGIN MENU ]</button></nav>
   <main id="schematic-container"></main>
   <aside id="examine-panel">
     <div class="header">EXAMINATION ROOM — IDLE</div>
@@ -554,7 +604,7 @@ function _itemInZone(item, zone, geom) {
     // confines them to the waste body), so the LCS biofilm zone has no items.
     return false;
 }
-function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom) {
+function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessionSeed = 0) {
     const dots = [];
     if (!scenario || !zoneSpec)
         return dots;
@@ -581,7 +631,7 @@ function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom) {
             const candidateHosts = mineralSubstrates.length > 0
                 ? itemList.filter((it) => _substratesMatch(it.substrate_tokens, mineralSubstrates) && _itemInZone(it, zone, geom))
                 : [];
-            const seed = _hashStr(`${scenario.id}|${mineralId}|${zoneId}`);
+            const seed = _hashStr(`${scenario.id}|${mineralId}|${zoneId}|${sessionSeed}`);
             const rng = _mulberry32(seed);
             for (let i = 0; i < dotsPerZone; i++) {
                 if (candidateHosts.length > 0) {
@@ -1143,7 +1193,7 @@ function _markBlockOccupied(occupancy, col, row, wTiles, hTiles, itemId) {
         }
     }
 }
-function generatePlacedItems(scenario, itemSpec, geom) {
+function generatePlacedItems(scenario, itemSpec, geom, sessionSeed = 0) {
     const items = [];
     const occupancy = {};
     const unplaced = {};
@@ -1171,7 +1221,7 @@ function generatePlacedItems(scenario, itemSpec, geom) {
         const hTiles = co.hT;
         const count = counts[classId];
         for (let i = 0; i < count; i++) {
-            const seed = _hashStr07(`${scenario.id}|${classId}|${i}`);
+            const seed = _hashStr07(`${scenario.id}|${classId}|${i}|${sessionSeed}`);
             const rng = _mulberry32_07(seed);
             let placedThis = false;
             for (let attempt = 0; attempt < MAX_PLACEMENT_TRIES; attempt++) {
@@ -1470,7 +1520,40 @@ function generatePlacedItems(scenario, itemSpec, geom) {
 //        per-host crystal counts at the item level. The CrystalDot
 //        shape is stable (host fields nullable), so future engine
 //        replacement of the seeded sampler doesn't break the renderer.
-const WASTELAND_VERSION = "v8";
+//   v9 — title-screen flow + per-begin random seed (2026-05-07): boss
+//        framing — boot log + button row IS the title screen; clicking a
+//        scenario transitions into a cell view; back button returns. Each
+//        BEGIN press scrambles the layout so the same scenario shows
+//        different appliance/item/crystal positions per session, keeping
+//        chemistry deterministic but physical placement variable.
+//        - index.html structure: body.view-title (default) / body.view-cell
+//          state. Title view shows boot log + BEGIN header + scenario
+//          selector; cell view shows back button + schematic + examination
+//          panel. CSS toggle hides the unused half on each side.
+//        - Buttons reordered: scenarios first (MONT-SAINT-GUIBERT,
+//          HALBENRAIN), OVERVIEW third — primary verbs lead.
+//        - 'BEGIN' header (letter-spaced amber, mining-report register)
+//          contextualizes the buttons as actions.
+//        - Back button '[ ← BEGIN MENU ]' in the cell view returns to
+//          title; clears activeScenarioId and currentSessionSeed.
+//        - currentSessionSeed: number | null — set to a fresh
+//          Math.floor(Math.random() * 1e9) on each BEGIN of a scenario;
+//          mixed into both 07-cell-population's hash (`scenario.id|class_id|
+//          index|sessionSeed`) and 03-crystal-positions's hash
+//          (`scenario.id|mineral_id|zone_id|sessionSeed`) so item placement
+//          AND crystal-dot placement scramble together. OVERVIEW doesn't
+//          render either, so the seed is moot there. Baseline
+//          deterministic (sessionSeed=0) preserved when no seed passed —
+//          the v0–v8 layouts are recoverable.
+//        - page-title element updates between views: 'WASTELAND CRYSTALS —
+//          BOOT' on title, 'WASTELAND CRYSTALS — MONT-SAINT-GUIBERT,
+//          BELGIUM' (or HALBENRAIN, AUSTRIA, or OVERVIEW) on cell.
+//        Engine implications: the seed is structural — future engine
+//        ticks read it as the master RNG seed for any chemistry or
+//        substrate-distribution randomness. Determinism within a session
+//        is preserved (the seed is fixed once BEGIN is pressed); fresh
+//        sessions produce fresh layouts.
+const WASTELAND_VERSION = "v9";
 
 // ── 99-renderer-cross-section.js ──
 
@@ -1536,6 +1619,7 @@ function buildSchematicSVG(cfg, opts) {
     const scenario = opts.scenario ?? null;
     const itemSpec = opts.itemSpec ?? null;
     const mineralSpec = opts.mineralSpec ?? null;
+    const sessionSeed = opts.sessionSeed ?? 0;
     // populationResult is captured here once items render so the crystal-dot
     // pass downstream can use the same placed items as host-anchor candidates.
     let placedItemsList = [];
@@ -1657,7 +1741,7 @@ function buildSchematicSVG(cfg, opts) {
             lowerLayersM: lowerLayersMTotal,
             cellTopYM: cellTopYM,
         };
-        const populationResult = generatePlacedItems(scenario, itemSpec, popGeom);
+        const populationResult = generatePlacedItems(scenario, itemSpec, popGeom, sessionSeed);
         const items = populationResult.items;
         placedItemsList = items;
         // Stash on the global window so the boot harness's click handler can
@@ -1809,7 +1893,7 @@ function buildSchematicSVG(cfg, opts) {
             cellTopYM: cellTopYM,
             lcsThicknessM: cfg.lowerLayers[0].thicknessM,
         };
-        const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom);
+        const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom, sessionSeed);
         parts.push(`<g class="crystal-dots">`);
         for (const d of dots) {
             const fill = mineralDotColor(d.mineral_id);
@@ -2206,6 +2290,52 @@ function svgStyle() {
       // otherwise the SCENARIO_SPEC entry whose active_zones filter the
       // schematic and whose expected_species drive the dot placement.
       var activeScenarioId = null;
+      // Session seed mixed into item-placement and crystal-dot hashes so
+      // each BEGIN click produces a different physical layout for the same
+      // scenario. Null = baseline deterministic (the v0–v8 layout). Set to
+      // a fresh Math.random()-derived integer on each BEGIN press.
+      var currentSessionSeed = null;
+
+      function setView(state) {
+        var body = document.body;
+        body.classList.remove("view-title", "view-cell");
+        body.classList.add(state === "cell" ? "view-cell" : "view-title");
+      }
+
+      function pageTitleForCell() {
+        var t = document.getElementById("page-title");
+        if (!t) return;
+        if (activeScenarioId && typeof SCENARIO_SPEC !== "undefined" && SCENARIO_SPEC && SCENARIO_SPEC[activeScenarioId]) {
+          var s = SCENARIO_SPEC[activeScenarioId];
+          t.textContent = "WASTELAND CRYSTALS — " + s.location.locality.toUpperCase() + ", " + s.location.country.toUpperCase();
+        } else {
+          t.textContent = "WASTELAND CRYSTALS — OVERVIEW";
+        }
+      }
+      function pageTitleForBegin() {
+        var t = document.getElementById("page-title");
+        if (t) t.textContent = "WASTELAND CRYSTALS — BOOT";
+      }
+
+      function beginScenario(id) {
+        activeScenarioId = id || null;
+        // Fresh session seed (only when a scenario is selected — OVERVIEW
+        // doesn't render items or crystals so a seed is moot there).
+        currentSessionSeed = activeScenarioId ? Math.floor(Math.random() * 1e9) : null;
+        // Reset examination panel to its idle state — the previous click's
+        // narrative belongs to a different cell.
+        renderIdlePanel("Click a crystal in the schematic to read its paragenesis.");
+        setView("cell");
+        pageTitleForCell();
+        rerenderForActiveScenario();
+      }
+
+      function returnToBeginMenu() {
+        activeScenarioId = null;
+        currentSessionSeed = null;
+        setView("title");
+        pageTitleForBegin();
+      }
 
       function rerenderForActiveScenario() {
         if (typeof renderCrossSectionInto !== "function") return;
@@ -2213,6 +2343,7 @@ function svgStyle() {
           zoneSpec: typeof ZONE_SPEC !== "undefined" ? ZONE_SPEC : null,
           itemSpec: typeof ITEM_SPEC !== "undefined" ? ITEM_SPEC : null,
           mineralSpec: typeof MINERAL_SPEC !== "undefined" ? MINERAL_SPEC : null,
+          sessionSeed: currentSessionSeed,
         };
         if (activeScenarioId && typeof SCENARIO_SPEC !== "undefined" && SCENARIO_SPEC && SCENARIO_SPEC[activeScenarioId]) {
           opts.scenario = SCENARIO_SPEC[activeScenarioId];
@@ -2223,6 +2354,12 @@ function svgStyle() {
           pre.textContent += "\n[ERR] re-render threw: " + (e && e.message ? e.message : e);
         }
       }
+
+      // Wire the back button once at boot; visibility is CSS-driven.
+      (function () {
+        var backBtn = document.getElementById("back-btn");
+        if (backBtn) backBtn.addEventListener("click", returnToBeginMenu);
+      })();
 
       // Resolve a clicked dot's data-host-item-id back to the full PlacedItem
       // record stashed by the renderer (window.LAST_PLACED_ITEMS). Returns
@@ -2349,34 +2486,29 @@ function svgStyle() {
         if (!nav || nav.dataset.built === "1") return;
         nav.dataset.built = "1";
 
+        // BEGIN buttons: clicking transitions to cell view + (for scenarios)
+        // generates a fresh session seed so each press scrambles the item
+        // and crystal layout. The 'active' class is unused on the title
+        // screen since selection ends the begin-menu state.
         function makeBtn(id, label) {
           var b = document.createElement("button");
           b.textContent = label;
           b.dataset.scenarioId = id || "";
-          if ((id || null) === activeScenarioId) b.classList.add("active");
           b.addEventListener("click", function () {
-            activeScenarioId = id || null;
-            // Update button highlighting
-            var btns = nav.querySelectorAll("button");
-            for (var i = 0; i < btns.length; i++) {
-              var bid = btns[i].dataset.scenarioId || null;
-              if (bid === activeScenarioId) btns[i].classList.add("active");
-              else btns[i].classList.remove("active");
-            }
-            rerenderForActiveScenario();
+            beginScenario(id || null);
           });
           return b;
         }
 
-        nav.appendChild(makeBtn("", "[ OVERVIEW ]"));
+        // Order: scenarios first (the primary verbs), OVERVIEW third (the
+        // analytical / no-cell view). Boss design 2026-05-07.
         var ids = Object.keys(SCENARIO_SPEC);
         for (var i = 0; i < ids.length; i++) {
           var s = SCENARIO_SPEC[ids[i]];
-          // Use the locality as the button label — short, all-caps, matches
-          // the surveyor's-voice register of the player_brief.
           var label = "[ " + s.location.locality.toUpperCase() + " ]";
           nav.appendChild(makeBtn(ids[i], label));
         }
+        nav.appendChild(makeBtn("", "[ OVERVIEW ]"));
       }
     })();
   </script>
