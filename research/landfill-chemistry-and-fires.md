@@ -415,3 +415,84 @@ LFG steady-state: **CH₄ 45–60%, CO₂ 40–60%, N₂ 2–5%, O₂ 0.1–1%, 
 - **Different element menu:** burn zone is **enriched in Pb, Zn, Cu, Fe, Cr, Ni, Ca**; **depleted in Hg, Cd, As, Sb** (volatilized away). Tire-burn pockets are **Zn-S rich** (ZnS sphalerite-analog crystals plausible). PVC-burn pockets release HCl that drives a chloride brine — chloride-bearing minerals (atacamite, cotunnite, chlorargyrite-analogs) become reasonable.
 - **pH/redox flip:** unburned zone is anaerobic, near-neutral, methanogenic; burn zone is alkaline (pH 10–12, ettringite-buffered), oxidized. Same element grows different minerals: Cu in unburned reducing brine → covellite/digenite; Cu in burn zone → tenorite/malachite/atacamite.
 - **Hot signature mineralogy:** gehlenite, åkermanite, hematite, magnetite, anorthite, glass — a melilite-clinker assemblage that doesn't appear in cold zones, plus secondary ettringite/gypsum efflorescences as the slag weathers. Visually: red-orange Fe-oxide rinds, white salt blooms, black glassy clinker, vs the unburned zone's grey-brown organic ooze.
+
+---
+
+## Appendix E: Documented Landfill Mineralogy and Modern Leachate Organics
+
+Source: targeted research thread on what minerals and synthetic organic compounds have been **directly documented in real landfills** (vs. predicted from chemistry). Run 2026-05-07 to ground the catalog in observation, not speculation. Reproduced with citations intact.
+
+### E.1 Documented landfill mineralogy
+
+**Leachate collection system (LCS) scaling.** The classic LCS-clogging assemblage is dominated by **calcite (CaCO₃)**, with subordinate **iron sulfides, gypsum, struvite, and vivianite** in a matrix of biofilm and organic gel — Bennett/Fleming/Rowe biogeochemical-clogging work ([Waste Advantage Magazine review](https://wasteadvantagemag.com/biogeochemical-clogging-landfill-leachate-collection-systems-occurring-can-cleaned-can-done-prevent-part-ii/)). Calcite formation is biologically induced: sulfate- and iron-reducing bacteria raise alkalinity until pCa exceeds saturation under reduced conditions ([Goodway industry write-up](https://www.goodway.com/hvac-blog/2017/03/why-removing-calcite-limestone-from-landfill-leachate-systems-lines-require-specialized-descaling-chemicals/)). **Vivianite (Fe₃(PO₄)₂·8H₂O)** scaling under Fe-reducing conditions is reviewed in [Wilfert et al., *Water Research* 2021, doi:10.1016/j.watres.2021.117064](https://www.sciencedirect.com/science/article/pii/S0043135421002438) — wastewater context, but identical chemistry to bioreactor-landfill recirculation lines.
+
+**Landfill mining (excavation studies — what's actually in old landfill cores).** **Mont-Saint-Guibert, Belgium (NEW-MINE project)**: electron-microprobe study of the <4.5 mm fraction reports Zn as **Fe-Zn alloy, sphalerite (ZnS), zincosite/zincite-type ZnSO₄**, and Pb as metallic Pb plus **Pb-Ca phosphate (pyromorphite-group, Pb₅(PO₄)₃Cl)** — [Garcia Lopez et al., *Detritus* 8](https://digital.detritusjournal.com/articles/case-study-on-enhanced-landfill-mining-at-mont-saint-guibert-landfill-in-belgium-mechanical-processing-physico-chemical-and-mineralogical-characterization-of-fine-fractions-45-mm/310). Halbenrain (AT) and Mont-Saint-Guibert work synthesized in [Hernandez Parrodi et al., *Processes* 9, 394, 2021, doi:10.3390/pr9020394](https://www.mdpi.com/2227-9717/9/2/394). Pyromorphite is visually striking — green hexagonal prisms — and observed in real excavated landfill, not predicted.
+
+**MSWI bottom-ash secondary mineralogy on weathering.** Piantone, Bodénan & Chatelet-Snidaro (2004) plus the [Saffarzadeh et al. *Waste Management* 2011 synthesis, doi:10.1016/j.wasman.2011.06.010](https://www.sciencedirect.com/science/article/abs/pii/S0956053X11003242) report a consistent assemblage from primary glass + lime/portlandite/melilite altering to: **calcite ≫ Fe-oxyhydroxides (ferrihydrite, goethite) ≈ quartz ≥ ettringite (Ca₆Al₂(SO₄)₃(OH)₁₂·26H₂O), gypsum, hydrocalumite (Friedel's salt, Ca₂Al(OH)₆Cl·2H₂O), gibbsite, brucite, alumina gel**. Open-access Piantone synthesis: [hal.science/hal-03794653](https://hal.science/hal-03794653/). **Hydrocalumite immobilizes Pb by Ca/Pb lattice substitution** — a real chemistry mechanism explaining one path by which burn zones lock heavy metals beyond just sulfide precipitation.
+
+**IMA-recognized anthropogenic mineral species relevant to landfill chemistry** (from [Hazen, Grew, Origlieri & Downs 2017, *Am. Mineral.* 102, 595–611, doi:10.2138/am-2017-5875](https://pubs.geoscienceworld.org/msa/ammin/article/102/3/595/277982/On-the-mineralogy-of-the-Anthropocene-Epoch)):
+
+| Mineral | Formula | Substrate / source |
+|---|---|---|
+| **Simonkolleite** | Zn₅(OH)₈Cl₂·H₂O | Galvanized steel under chloride brine — should be **abundant** in any zone with galvanized + Cl⁻ |
+| **Abhurite** | Sn₃O(OH)₂Cl₂ | Tin under chloride brine (solder, plating, food cans) |
+| **Chalconatronite** | Na₂Cu(CO₃)₂·3H₂O | Bronze corrosion (statues, plumbing fittings) |
+| **Atacamite group** | Cu₂Cl(OH)₃ and isomers | Bronze/copper corrosion in chloride brine |
+| **Tinnunculite** | C₅H₄N₄O₃·2H₂O | Uric-acid-derived — diapers + pet waste + general organics make this a plausible biogenic phase |
+
+The Hazen 2017 paper itself does not catalogue landfill occurrences, but the species IDs come from its supplementary table. Of these, **simonkolleite stands out: galvanized steel is everywhere in landfills, chloride brine is everywhere, so simonkolleite should be one of the most abundant visible secondary minerals in the simulator** — not a curiosity, a default.
+
+**Struvite (NH₄MgPO₄·6H₂O)** recovery from landfill leachate is well established — [Li & Zhao, *Chemosphere* 44 (2001)](https://www.sciencedirect.com/science/article/abs/pii/S0045653501001322) for the seminal demonstration; [Huang et al., *Waste Management* 2014, PMID 25043172](https://pubmed.ncbi.nlm.nih.gov/25043172/) for modern recovery work.
+
+### E.2 Modern synthetic-organic precursors in leachate (post-2010 literature)
+
+The classical leachate chemistry (Kjeldsen 2002, Appendix B) covers VFAs, humics, NH₄⁺, Cl⁻, heavy metals. The post-2010 literature adds the modern persistent-pollutant suite:
+
+- **PFAS**: [Lang et al., *ES&T* 51 (2017), doi:10.1021/acs.est.6b05005](https://pubs.acs.org/doi/10.1021/acs.est.6b05005) — first US national estimate of PFAS in MSW leachate. [Tolaymat et al., *Sci. Total Environ.* 905 (2023)](https://pmc.ncbi.nlm.nih.gov/articles/PMC10842600/) — total PFAS in US MSW leachate ranges <DL to ~125,000 ng/L (mean ~10,500 ng/L); ~11% of mobile load exits via leachate.
+- **Phthalates / BPA / alkylphenols**: [Clarke et al., *Water Res.* 47 (2013)](https://www.sciencedirect.com/science/article/pii/S0043135412008664) — DEHP up to 5.3 mg/L, BPA 0.5–1,800 µg/L. [Sun et al., *Int. J. Environ. Res.* 2024](https://link.springer.com/article/10.1007/s41742-024-00627-0) for recent synthesis.
+- **Pharmaceuticals**: [Masoner et al., *Environ. Sci. Process. Impacts* 18 (2016), PMID 26562222](https://pubmed.ncbi.nlm.nih.gov/26562222/) — US-wide leachate survey; carbamazepine, ibuprofen, lidocaine, sulfamethoxazole detected at nearly all sites. [Ramírez-Malule et al., *Waste Manage.* 141 (2022), PMID 35085866](https://pubmed.ncbi.nlm.nih.gov/35085866/) — carbamazepine highly persistent (still hundreds of ng/L in cells closed >13 yr).
+
+These are "forever" precursors in addition to the inorganic forever-species (NH₄⁺, Cl⁻). PFAS in particular is fluorocarbon-stable and can complex with metals; concentrations in 4–5 figure ng/L range mean it's a real chemistry component, not a trace pollutant.
+
+### E.3 Methylated metal/metalloid species
+
+- **Methylmercury**: Hg-methylating sulfate-reducer clades (genes hgcAB, Parks et al. 2013) thrive in landfill anaerobic zones. Direct MeHg measurements in landfill leachate are sparse, but [Lindberg et al., *ES&T* 35 (2001), doi:10.1021/es0102060](https://pubs.acs.org/doi/10.1021/es0102060) reports **dimethylmercury in landfill gas** — mechanism solid, in-situ MeHg quantification thin.
+- **Methylarsenic**: [Pinel-Raffaitin et al., *ES&T* 41 (2007), doi:10.1021/es063080x](https://www.researchgate.net/publication/6143488) — mono/di/tri-methylarsenic in leachates 0.1–80 µg As/L; methylated and ethylated volatile As species in landfill biogas 0–15 µg As/m³.
+- **Methylselenium / methylantimony**: Same French group (Diemer & Feldmann 2008) reports volatile **trimethylantimony, dimethylselenide, dimethyldiselenide** in landfill biogas — *Environ. Pollut.* 156; cited in [Mestrot et al. landfill-gas review, doi:10.1016/j.envpol.2022.119784](https://doi.org/10.1016/j.envpol.2022.119784).
+
+### E.4 What the simulator can claim with citation cover vs predicted-only
+
+**Documented in real landfills (citable):**
+
+- Calcite, gypsum, vivianite, struvite, iron-sulfide gels, biofilm-templated carbonates in LCS-clog settings.
+- Ettringite, hydrocalumite (Friedel's salt), gibbsite, brucite, ferrihydrite, goethite, calcite as MSWI bottom-ash weathering crusts.
+- Sphalerite, metallic Pb, pyromorphite-group Pb-Ca phosphate, Fe-Zn alloy, ZnSO₄ in old fine-fraction landfill cores.
+- Simonkolleite, abhurite, chalconatronite, tinnunculite, atacamite-group as IMA-recognized anthropogenic species in plausible chemistry.
+- Methylarsenic, methylantimony, methylselenium volatile species; methylmercury — documented organometalloid pore-water/gas species.
+- PFAS, DEHP, BPA, nonylphenol, carbamazepine, ibuprofen, sulfamethoxazole, diclofenac as documented persistent organics in modern leachate.
+
+**Theoretically predicted but lacking direct landfill case-study cover:**
+
+- **Framboidal pyrite specifically in landfills** — chemistry permits and the texture is canonical in marine sediments (Ohfuji & Rickard 2005, Wilkin & Barnes 1996), but no peer-reviewed report from a landfill specifically. The earlier framing of "framboidal pyrite as the modal mid-game mineral" should be treated as a chemistry-grounded prediction, not an observation.
+- **Crystalline methylmercury solids** — only dissolved/volatile species are documented.
+- **Most novel halogenated-organic crystalline phases** — leachate concentrations of PFAS/phthalates/etc. are documented, but solid-phase precipitates of these compounds in situ are not.
+- **Specific paragenetic sequences (which mineral overgrows which) for landfill-mined cores** — most studies are bulk XRD/SEM snapshots, not paragenesis. **The simulator therefore has design freedom for the sequence; chemistry-first ordering is honest because no documented sequence exists to match.**
+
+### E.5 Sources
+
+- [Bennett/Fleming biogeochemical-clogging review (Waste Advantage)](https://wasteadvantagemag.com/biogeochemical-clogging-landfill-leachate-collection-systems-occurring-can-cleaned-can-done-prevent-part-ii/)
+- [Wilfert et al. 2021, vivianite scaling, *Water Res.*](https://www.sciencedirect.com/science/article/pii/S0043135421002438)
+- [Garcia Lopez, Mont-Saint-Guibert ELFM, *Detritus* 8](https://digital.detritusjournal.com/articles/case-study-on-enhanced-landfill-mining-at-mont-saint-guibert-landfill-in-belgium-mechanical-processing-physico-chemical-and-mineralogical-characterization-of-fine-fractions-45-mm/310)
+- [Hernandez Parrodi et al., NEW-MINE review, *Processes* 2021](https://www.mdpi.com/2227-9717/9/2/394)
+- [Saffarzadeh et al., *Waste Manage.* 2011 (MSWI bottom-ash mineralogy)](https://www.sciencedirect.com/science/article/abs/pii/S0956053X11003242)
+- [Piantone synthesis (HAL open access)](https://hal.science/hal-03794653/)
+- [Hazen et al. 2017, *Am. Mineral.* (anthropogenic mineral catalog)](https://pubs.geoscienceworld.org/msa/ammin/article/102/3/595/277982/On-the-mineralogy-of-the-Anthropocene-Epoch)
+- [Huang et al. 2014, struvite from landfill leachate](https://pubmed.ncbi.nlm.nih.gov/25043172/)
+- [Lang et al. 2017, PFAS national estimate, *ES&T*](https://pubs.acs.org/doi/10.1021/acs.est.6b05005)
+- [Tolaymat et al. 2023, PFAS critical review (PMC)](https://pmc.ncbi.nlm.nih.gov/articles/PMC10842600/)
+- [Clarke et al. 2013, phthalates/BPA in leachate, *Water Res.*](https://www.sciencedirect.com/science/article/pii/S0043135412008664)
+- [Sun et al. 2024, phthalates & phenols review](https://link.springer.com/article/10.1007/s41742-024-00627-0)
+- [Masoner et al. 2016, US pharmaceuticals in leachate](https://pubmed.ncbi.nlm.nih.gov/26562222/)
+- [Ramírez-Malule et al. 2022, *Waste Manage.* (carbamazepine persistence)](https://pubmed.ncbi.nlm.nih.gov/35085866/)
+- [Pinel-Raffaitin et al. 2007, As speciation in landfill leachate/gas](https://www.researchgate.net/publication/6143488)
+- [Lindberg et al. 2001, dimethylmercury in landfill gas](https://pubs.acs.org/doi/10.1021/es0102060)
