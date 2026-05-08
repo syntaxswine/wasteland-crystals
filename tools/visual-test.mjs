@@ -358,30 +358,41 @@ async function main() {
       report.scenarios[sc.label].burnNarrators = await exerciseBurnNarrators(page, OUT_DIR);
     }
 
-    // v11: any scenario with engine-grown dots → click one, screenshot
-    // the panel. Engine minerals are recognized via data-source="engine".
-    const hasEngineDot = await page.evaluate(() =>
-      !!document.querySelector("circle.dot[data-source='engine']"));
-    if (hasEngineDot && !SKIP_SHOTS) {
-      const engineInfo = await page.evaluate(() => {
-        const dot = document.querySelector("circle.dot[data-source='engine']");
-        if (!dot) return null;
-        dot.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        const panel = document.getElementById("examine-panel");
-        return {
-          mineral: dot.getAttribute("data-mineral-id"),
-          mass_mg: parseFloat(dot.getAttribute("data-crystal-mass-mg") ?? "0"),
-          age_steps: parseInt(dot.getAttribute("data-age-steps") ?? "0", 10),
-          paragenesisHasSimulatorState: !!panel?.querySelector(".paragenesis")?.textContent.includes("Simulator state:"),
+    // v11+: for any scenario with engine-grown dots, walk one dot per
+    // engine-grown mineral, click it, screenshot the panel, and record
+    // the engine state in report.json. v12 adds sphalerite, so the
+    // walk now produces 1-2 narrator screenshots per scenario.
+    const engineMinerals = await page.evaluate(() => {
+      const dots = document.querySelectorAll("circle.dot[data-source='engine']");
+      const ids = new Set();
+      for (const d of dots) ids.add(d.getAttribute("data-mineral-id"));
+      return Array.from(ids);
+    });
+    if (engineMinerals.length > 0 && !SKIP_SHOTS) {
+      report.scenarios[sc.label].engineNarrators = {};
+      for (const m of engineMinerals) {
+        const info = await page.evaluate((mid) => {
+          const dot = document.querySelector(`circle.dot[data-mineral-id='${mid}'][data-source='engine']`);
+          if (!dot) return null;
+          dot.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+          const panel = document.getElementById("examine-panel");
+          return {
+            mineral: dot.getAttribute("data-mineral-id"),
+            mass_mg: parseFloat(dot.getAttribute("data-crystal-mass-mg") ?? "0"),
+            age_steps: parseInt(dot.getAttribute("data-age-steps") ?? "0", 10),
+            zone: dot.getAttribute("data-zone-id"),
+            host: dot.getAttribute("data-host-item-class"),
+            paragenesisHasSimulatorState: !!panel?.querySelector(".paragenesis")?.textContent.includes("Simulator state:"),
+          };
+        }, m);
+        await new Promise((r) => setTimeout(r, 100));
+        const shot = join(OUT_DIR, `engine-narrator-${sc.label}-${m}.png`);
+        await page.screenshot({ path: shot, type: "png", fullPage: true });
+        report.scenarios[sc.label].engineNarrators[m] = {
+          ...info,
+          shot: `tools/test-output/engine-narrator-${sc.label}-${m}.png`,
         };
-      });
-      await new Promise((r) => setTimeout(r, 100));
-      const shot = join(OUT_DIR, `engine-narrator-${sc.label}.png`);
-      await page.screenshot({ path: shot, type: "png", fullPage: true });
-      report.scenarios[sc.label].engineNarrator = {
-        ...engineInfo,
-        shot: `tools/test-output/engine-narrator-${sc.label}.png`,
-      };
+      }
     }
 
     // Return to title before next iteration (skip on the last one).
@@ -398,13 +409,17 @@ async function main() {
   console.log("");
   console.log("## visual-test summary");
   console.log("");
-  console.log("| scenario | dots (sampler/engine) | rings (B/H/F) | items | svg |");
+  console.log("| scenario | dots | engine minerals | rings (B/H/F) | items |");
   console.log("|---|---|---|---|---|");
   for (const [label, s] of Object.entries(report.scenarios)) {
     const d = s.diagnostics;
     const rings = `${d.eventRings.burning}/${d.eventRings.halo}/${d.eventRings.frozen}`;
-    const engine = s.engineNarrator ? ` (${s.engineNarrator.mineral} ${s.engineNarrator.mass_mg.toFixed(2)}mg @ ${s.engineNarrator.age_steps}t)` : "";
-    console.log(`| ${label} | ${d.dotCount}${engine} | ${rings} | ${d.itemCount} | ${d.svgPresent ? "✓" : "✗"} |`);
+    const engineSummary = s.engineNarrators
+      ? Object.entries(s.engineNarrators)
+          .map(([m, i]) => `${m} ${i.mass_mg.toFixed(2)}mg@${i.age_steps}t`)
+          .join(", ")
+      : "—";
+    console.log(`| ${label} | ${d.dotCount} | ${engineSummary} | ${rings} | ${d.itemCount} |`);
   }
   if (report.scenarios.bridgeton?.burnNarrators) {
     console.log("");
