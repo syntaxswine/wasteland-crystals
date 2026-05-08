@@ -243,7 +243,7 @@ function _narrateMalachite(_scenario: any, _zoneId: string, available: Available
   return `${acidsClause} ${copperClause}. The Cu²⁺ migrated through the cell's wall-drainage path, where chemistry transitions fast enough to escape the methanogenic core's sulfide trap. Where the dissolved Cu met carbonate-rich pore water — ${carbonateClause} botryoidal malachite stabilized as the green metal-stain familiar from natural supergene zones. Diagenesis re-making the same mineral in eight decades that geologic systems make in eight thousand.`;
 }
 
-function _narrateGoslarite(_scenario: any, _zoneId: string, available: AvailablePrecursor[]): string {
+function _narrateGoslarite(_scenario: any, _zoneId: string, available: AvailablePrecursor[], engineState?: { mass_mg?: number | null; age_steps?: number | null; born_step?: number | null } | null): string {
   const chloride = _phrase("pvc_hcl_attack_on_zn", available);
   const sulfate = _phrase("drywall_sulfate", available);
 
@@ -255,7 +255,19 @@ function _narrateGoslarite(_scenario: any, _zoneId: string, available: Available
             ? `galvanized corrosion under acidic leachate releases Zn²⁺, which pairs with ${sulfate}`
             : "galvanized corrosion under acidic leachate releases Zn²⁺; Zn²⁺ + SO4²⁻ pairing is the dominant initial fate"));
 
-  return `Galvanized steel under acidic leachate corrodes at predictable rate: ${sourcesClause}. Goslarite isn't a stable phase — it crystallizes seasonally as pore waters concentrate during dry intervals, redissolves with the next rain, recrystallizes again. The acicular efflorescent crust pulses rather than accumulates, marking the cell's seasonal evaporation cycle on every rusting galvanized surface.`;
+  const base = `Galvanized steel under acidic leachate corrodes at predictable rate: ${sourcesClause}. Goslarite isn't a stable phase — it crystallizes seasonally as pore waters concentrate during dry intervals, redissolves with the next rain, recrystallizes again. The acicular efflorescent crust pulses rather than accumulates, marking the cell's seasonal evaporation cycle on every rusting galvanized surface.`;
+
+  // v11: when the dot came from the chemistry engine (rather than the
+  // seeded sampler), append a simulator-pedigree clause naming the
+  // engine's running totals. The age/mass numbers are how the engine
+  // tells the surveyor that the crystal isn't a catalog stand-in but a
+  // calculated product of the cell's chemistry over time.
+  if (engineState && typeof engineState.mass_mg === "number" && typeof engineState.age_steps === "number") {
+    const ageYears = (engineState.age_steps / 12).toFixed(1);
+    const massStr = engineState.mass_mg.toFixed(2);
+    return `${base}\n\nSimulator state: this crystal is engine-grown — ${ageYears} years of cell-time accumulation since nucleation, integrated mass ${massStr} mg after seasonal redissolution losses. The pulsing isn't decorative; the engine actually computes the wet-dry-cycle modulator and the local Zn supersaturation against goslarite's required_ingredients gate. Click reload to see the same crystal at a different season phase.`;
+  }
+  return base;
 }
 
 // ── Burn-overlay narrators (HANDOFF-BURN-ZONE.md §"narrator pattern for
@@ -424,6 +436,7 @@ function narrateCrystal(
   hostItem?: any | null,
   eventEntry?: any | null,
   eventState?: string | null,
+  engineDotState?: { source?: string; mass_mg?: number | null; age_steps?: number | null; born_step?: number | null } | null,
 ): CrystalNarrative {
   const m = { ...(mineralEntry ?? {}), _id: mineralId };
   const { available, absent } = _composeAvailablePrecursors(m, scenario, precursorSpec);
@@ -441,7 +454,7 @@ function narrateCrystal(
     case "calcite":        paragenesis = _narrateCalcite(scenario, zoneId, available);      break;
     case "vivianite":      paragenesis = _narrateVivianite(scenario, zoneId, available);    break;
     case "malachite":      paragenesis = _narrateMalachite(scenario, zoneId, available);    break;
-    case "goslarite":      paragenesis = _narrateGoslarite(scenario, zoneId, available);    break;
+    case "goslarite":      paragenesis = _narrateGoslarite(scenario, zoneId, available, (engineDotState && engineDotState.source === "engine") ? engineDotState : null);    break;
     case "struvite":       paragenesis = _narrateStruvite(scenario, zoneId, available);     break;
     case "hydrocalumite":  paragenesis = _narrateHydrocalumite(scenario, zoneId, available, ev, evState); break;
     case "anhydrite":      paragenesis = _narrateAnhydrite(scenario, zoneId, available, ev, evState); break;

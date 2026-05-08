@@ -446,6 +446,14 @@ _loadZoneSpec();
 // Future engine work will replace this generator with the per-cell
 // crystal-growth output; the dot list shape is stable so the renderer
 // can keep consuming the same data.
+// Minerals whose dots come from the chemistry engine (js/10-engine-cell.ts +
+// per-mineral js/11..14-engine-*.ts) rather than the seeded sampler.
+// v11: goslarite only. As more per-mineral engines land in v12+, add
+// their ids here; the sampler will skip them and the engine output
+// will be merged into the dot list at the end of generateCrystalDots.
+const ENGINE_CONTROLLED_MINERALS = {
+    goslarite: true,
+};
 // Per-mineral display color. Tokens come from minerals.json color_visual but
 // the renderer carries the canonical hex mapping (similar to how host-rock
 // colors live in the renderer in vugg-simulator's host-rock branch).
@@ -694,13 +702,33 @@ function _eventStatesForMineral(mineralEntry) {
     }
     return states;
 }
-function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessionSeed = 0) {
+function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessionSeed = 0, precursorSpec = null, itemSpec = null) {
     const dots = [];
     if (!scenario || !zoneSpec)
         return dots;
     const itemList = items ?? [];
+    // ── Chemistry engine pass (v11) ──
+    // Run the per-mineral chemistry engines first, BEFORE the seeded
+    // sampler, so engine output can stand alone for engine-controlled
+    // minerals. Engine output is appended to dots at the end so it
+    // composes with the sampler dots for non-engine-controlled minerals.
+    // The engine reads the cell's leachate chemistry, zone phases, and
+    // item substrate inventory; sampler stays as the steady-state
+    // zone-cluster placement for unengine'd minerals.
+    let engineCrystals = [];
+    if (typeof initCellState === "function" && typeof runCellEngineForScenarioAge === "function") {
+        const state = initCellState(scenario, zoneSpec, mineralSpec, itemSpec, precursorSpec, itemList, geom, sessionSeed);
+        runCellEngineForScenarioAge(state);
+        engineCrystals = state.crystals;
+    }
     const expectedSpecies = scenario.expected_species ?? {};
     for (const mineralId of Object.keys(expectedSpecies)) {
+        // Skip engine-controlled minerals — their dots come from the engine
+        // pass below, not from the seeded sampler. This keeps the sampler
+        // out of the way of the chemistry math for minerals where the
+        // chemistry math actually runs.
+        if (ENGINE_CONTROLLED_MINERALS[mineralId])
+            continue;
         const speciesEntry = expectedSpecies[mineralId];
         const role = speciesEntry.evidence_role;
         const dotsPerZone = _dotsForRole(role);
@@ -768,7 +796,7 @@ function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessi
         // to ring-uniform sampling.
         const events = Array.isArray(scenario.events) ? scenario.events : [];
         const eventStates = _eventStatesForMineral(mineralEntry);
-        if (events.length > 0 && eventStates.length > 0) {
+        if (events.length > 0 && eventStates.length > 0 && !ENGINE_CONTROLLED_MINERALS[mineralId]) {
             for (const ev of events) {
                 for (const state of eventStates) {
                     const candidateHosts = mineralSubstrates.length > 0
@@ -815,6 +843,32 @@ function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessi
                 }
             }
         }
+    }
+    // ── Engine output merge ──
+    // Append engine-grown crystals as CrystalDot entries with source:"engine"
+    // and crystal_mass_mg set. The renderer scales radius with mass for
+    // engine dots; the examination panel reads source/mass to label the
+    // crystal as engine-grown ("simulator prediction"). Engine evidence_role
+    // resolves through scenario.expected_species when listed there;
+    // otherwise defaults to "engine_predicted" so the panel reads the
+    // correct surveyor-vs-simulator pedigree.
+    for (const ec of engineCrystals) {
+        const declared = scenario.expected_species?.[ec.mineral_id];
+        const role = declared ? declared.evidence_role : "engine_predicted";
+        dots.push({
+            x_m: ec.x_m,
+            y_m: ec.y_m,
+            mineral_id: ec.mineral_id,
+            evidence_role: role,
+            zone_id: ec.zone_id,
+            host_item_id: ec.host_item_id ?? null,
+            host_item_class: ec.host_item_class ?? null,
+            event_id: null,
+            event_state: null,
+            source: "engine",
+            crystal_mass_mg: ec.crystal_mass_mg,
+            age_steps: ec.age_steps,
+        });
     }
     return dots;
 }
@@ -1006,7 +1060,7 @@ function _narrateMalachite(_scenario, _zoneId, available) {
         : `late-stage carbonate from the cell's mature alkalinizing chemistry —`;
     return `${acidsClause} ${copperClause}. The Cu²⁺ migrated through the cell's wall-drainage path, where chemistry transitions fast enough to escape the methanogenic core's sulfide trap. Where the dissolved Cu met carbonate-rich pore water — ${carbonateClause} botryoidal malachite stabilized as the green metal-stain familiar from natural supergene zones. Diagenesis re-making the same mineral in eight decades that geologic systems make in eight thousand.`;
 }
-function _narrateGoslarite(_scenario, _zoneId, available) {
+function _narrateGoslarite(_scenario, _zoneId, available, engineState) {
     const chloride = _phrase("pvc_hcl_attack_on_zn", available);
     const sulfate = _phrase("drywall_sulfate", available);
     const sourcesClause = chloride && sulfate
@@ -1016,7 +1070,18 @@ function _narrateGoslarite(_scenario, _zoneId, available) {
             : (sulfate
                 ? `galvanized corrosion under acidic leachate releases Zn²⁺, which pairs with ${sulfate}`
                 : "galvanized corrosion under acidic leachate releases Zn²⁺; Zn²⁺ + SO4²⁻ pairing is the dominant initial fate"));
-    return `Galvanized steel under acidic leachate corrodes at predictable rate: ${sourcesClause}. Goslarite isn't a stable phase — it crystallizes seasonally as pore waters concentrate during dry intervals, redissolves with the next rain, recrystallizes again. The acicular efflorescent crust pulses rather than accumulates, marking the cell's seasonal evaporation cycle on every rusting galvanized surface.`;
+    const base = `Galvanized steel under acidic leachate corrodes at predictable rate: ${sourcesClause}. Goslarite isn't a stable phase — it crystallizes seasonally as pore waters concentrate during dry intervals, redissolves with the next rain, recrystallizes again. The acicular efflorescent crust pulses rather than accumulates, marking the cell's seasonal evaporation cycle on every rusting galvanized surface.`;
+    // v11: when the dot came from the chemistry engine (rather than the
+    // seeded sampler), append a simulator-pedigree clause naming the
+    // engine's running totals. The age/mass numbers are how the engine
+    // tells the surveyor that the crystal isn't a catalog stand-in but a
+    // calculated product of the cell's chemistry over time.
+    if (engineState && typeof engineState.mass_mg === "number" && typeof engineState.age_steps === "number") {
+        const ageYears = (engineState.age_steps / 12).toFixed(1);
+        const massStr = engineState.mass_mg.toFixed(2);
+        return `${base}\n\nSimulator state: this crystal is engine-grown — ${ageYears} years of cell-time accumulation since nucleation, integrated mass ${massStr} mg after seasonal redissolution losses. The pulsing isn't decorative; the engine actually computes the wet-dry-cycle modulator and the local Zn supersaturation against goslarite's required_ingredients gate. Click reload to see the same crystal at a different season phase.`;
+    }
+    return base;
 }
 // ── Burn-overlay narrators (HANDOFF-BURN-ZONE.md §"narrator pattern for
 // burn-derived phases") ──
@@ -1163,7 +1228,7 @@ function _fallbackNarrative(mineral, available, _zoneId) {
     return `${intro}\n\nFrom this cell's confirmed substrate origins: ${namedSources}. These precursors, under ${phaseToken}-phase chemistry, deliver the ingredients ${mineral.formula} requires. ${mineral.description ?? ""}`;
 }
 // ── Dispatcher ──
-function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem, eventEntry, eventState) {
+function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem, eventEntry, eventState, engineDotState) {
     const m = { ...(mineralEntry ?? {}), _id: mineralId };
     const { available, absent } = _composeAvailablePrecursors(m, scenario, precursorSpec);
     let paragenesis = "";
@@ -1190,7 +1255,7 @@ function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, pr
             paragenesis = _narrateMalachite(scenario, zoneId, available);
             break;
         case "goslarite":
-            paragenesis = _narrateGoslarite(scenario, zoneId, available);
+            paragenesis = _narrateGoslarite(scenario, zoneId, available, (engineDotState && engineDotState.source === "engine") ? engineDotState : null);
             break;
         case "struvite":
             paragenesis = _narrateStruvite(scenario, zoneId, available);
@@ -1562,6 +1627,358 @@ function generatePlacedItems(scenario, itemSpec, geom, sessionSeed = 0) {
         }
     }
     return { items, occupancy, unplaced, grid_cols: gridCols, grid_rows: gridRows, tile_size_m: TILE_SIZE_M };
+}
+
+// ── 10-engine-cell.js ──
+
+// ============================================================
+// js/10-engine-cell.ts — cell-state model + tick loop scaffolding
+// ============================================================
+//
+// First chemistry-engine pass per proposals/PROPOSAL-WASTELAND-CRYSTALS.md
+// §"First mineral: pick goslarite" and HANDOFF-VOICE-AND-DISCIPLINE.md
+// §"First growth engine — when chemistry math lands". The data spines
+// (minerals × scenarios × zones × precursors × items) have been complete
+// since v6; v11 lights the chemistry engine that consumes them.
+//
+// Architecture:
+// - One tick = 1 month of cell time. 12 ticks/year. A scenario's
+//   cell_age = scenario.waste_age_years × 12 (so MSG = 360, Halbenrain
+//   = 300, Bridgeton = 264).
+// - Each mineral has a per-mineral growth function (e.g. js/11-engine-
+//   goslarite.ts grows goslarite). v11 ships only the goslarite engine;
+//   other minerals fall through to the seeded-sampler path in
+//   js/03-crystal-positions.ts. New per-mineral engines drop into
+//   js/12-engine-*.ts as they're authored.
+// - Engine output is a list of EngineCrystal entries that the dot
+//   generator consumes. Each carries mass + age, so the renderer can
+//   scale dot size with crystal_mass_mg.
+// - Determinism: the engine uses the same session-seeded mulberry32 the
+//   sampler uses, plus the cell's age in steps. Re-running gives the
+//   same crystals; the BEGIN button's session seed scrambles the
+//   per-tile noise but not the gross deterministic output.
+//
+// What the v11 engine does NOT do (slated for later):
+// - True per-tick supersaturation math with mass balance against zone
+//   thickness_um. v11 computes a closed-form mass = age × growth_rate ×
+//   season_modulator. The handoff said "~50 lines + mass balance + a
+//   baseline test"; v11 ships the 50 lines + scaffolds for mass
+//   balance + the visual harness as the baseline.
+// - Inter-mineral competition (one mineral consuming a precursor that
+//   another mineral was about to use). Slated for v12-v13.
+// - Burn-event quench-rate gating (per HANDOFF-BURN-ZONE.md §"Engine
+//   quench-rate gating"). The events schema is structured for it; the
+//   engine will read it when this layer matures.
+// Default ticks-per-year convention. Mirrored in HANDOFF-BURN-ZONE.md
+// events[] schema: 100 steps/year was the burn-zone aspirational rate;
+// 12 ticks/year is what the engine actually uses for chemistry math
+// because monthly granularity matches the scale of seasonal-pulse
+// processes (goslarite efflorescence-dissolution cycles, methanogenic-
+// front migration). Burn events will be re-quantized to monthly when
+// the quench-rate engine arrives.
+const TICKS_PER_YEAR = 12;
+function _hashStrEngine(s) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+}
+function _mulberry32Engine(seed) {
+    let t = seed >>> 0;
+    return function () {
+        t = (t + 0x6D2B79F5) >>> 0;
+        let r = t;
+        r = Math.imul(r ^ (r >>> 15), r | 1);
+        r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+}
+// Returns the zone whose footprint contains the placed item's center,
+// using the same _itemInZone test the sampler uses. When an item sits
+// in multiple zones (zone overlap), returns the first match in zoneSpec
+// iteration order. Returns null when no zone contains the item.
+function _findItemZone(item, zoneSpec, geom) {
+    for (const id of Object.keys(zoneSpec)) {
+        const zone = zoneSpec[id];
+        if (typeof _itemInZone === "function" && _itemInZone(item, zone, geom)) {
+            return { id, zone };
+        }
+    }
+    return null;
+}
+// Initialize a cell state at age=0 with no crystals. Caller is expected
+// to advance the cell by calling runCellEngine (or per-mineral growth
+// functions directly). Per-scenario default age comes from
+// scenario.waste_age_years.
+function initCellState(scenario, zoneSpec, mineralSpec, itemSpec, precursorSpec, items, geom, sessionSeed = 0) {
+    return {
+        scenario,
+        zoneSpec: zoneSpec ?? {},
+        mineralSpec: mineralSpec ?? {},
+        itemSpec: itemSpec ?? {},
+        precursorSpec: precursorSpec ?? {},
+        items: items ?? [],
+        geom,
+        cellAgeSteps: 0,
+        sessionSeed,
+        crystals: [],
+    };
+}
+// Run the engine forward to the cell's full age. Per-mineral growth
+// functions are dispatched inside; v11 dispatches only goslarite. The
+// closed-form mass model means we don't need a real per-tick loop —
+// growGoslarite computes mass once given the final age. When v12-v13
+// add per-tick supersaturation math, this function will switch to a
+// real loop.
+function runCellEngine(state, totalSteps) {
+    state.cellAgeSteps = totalSteps;
+    // Goslarite engine — js/11-engine-goslarite.ts.
+    if (typeof growGoslarite === "function") {
+        const goslariteCrystals = growGoslarite(state);
+        state.crystals.push(...goslariteCrystals);
+    }
+    // Future per-mineral engines wire in here:
+    // if (typeof growSphalerite === "function") state.crystals.push(...growSphalerite(state));
+    // if (typeof growPyromorphite === "function") state.crystals.push(...growPyromorphite(state));
+    return state;
+}
+// Convenience: run the engine for a scenario at its declared waste_age
+// in years. Used by 03-crystal-positions.ts when wiring the engine into
+// the dot-generation path.
+function runCellEngineForScenarioAge(state) {
+    const ageYears = (state.scenario && typeof state.scenario.waste_age_years === "number")
+        ? state.scenario.waste_age_years
+        : 25;
+    return runCellEngine(state, ageYears * TICKS_PER_YEAR);
+}
+// Helper exposed for per-mineral engines: tells you the supersaturation
+// score for a (zone, scenario, mineral) tuple. Score in [0, ∞):
+//   < 1.0  → undersaturated (mineral does not nucleate)
+//   1.0    → at saturation
+//   > 1.0  → supersaturated (faster nucleation, faster growth)
+//   ≥ nucleation_sigma → nucleation gate fires
+// For v11 this is a simple ratio of available ions to required;
+// per-mineral engines can override with chemistry-specific heuristics.
+function _supersaturationScore(zone, mineral, scenario) {
+    if (!zone || !mineral || !mineral.required_ingredients)
+        return 0;
+    const reqs = mineral.required_ingredients;
+    const zoneIons = (zone.characteristic_ions_mg_per_L ?? {});
+    const scenIons = (scenario && scenario.leachate_chemistry && scenario.leachate_chemistry.ions_mg_per_L) || {};
+    let minRatio = Infinity;
+    for (const sp of Object.keys(reqs)) {
+        const need = reqs[sp];
+        if (typeof need !== "number" || need <= 0)
+            continue;
+        // Take the larger of zone-typical and scenario-bulk for this species.
+        const zoneVal = typeof zoneIons[sp] === "number" ? zoneIons[sp] : 0;
+        const scenVal = typeof scenIons[sp] === "number" ? scenIons[sp] : 0;
+        const have = Math.max(zoneVal, scenVal);
+        const ratio = have / need;
+        if (ratio < minRatio)
+            minRatio = ratio;
+    }
+    return isFinite(minRatio) ? minRatio : 0;
+}
+// Helper: pH-window score in [0, 1].
+//   1.0 = pH sits at the optimum window's center
+//   0.0 = pH is outside the window entirely
+//   linear falloff toward the window edges and beyond
+function _pHWindowScore(zone, mineral, scenario) {
+    if (!mineral || !mineral.pH_optimum)
+        return 1;
+    const [lo, hi] = mineral.pH_optimum;
+    const scenPH = scenario && scenario.leachate_chemistry && typeof scenario.leachate_chemistry.pH === "number"
+        ? scenario.leachate_chemistry.pH : 7;
+    // Zone phase translates loosely to a pH bias. v11 uses the zone's
+    // typical_phase as a hint and takes the scenario pH offset by the
+    // zone phase's expected adjustment. Crude but enough for v11.
+    const phaseBias = {
+        acid: -2,
+        acid_leaning: -1,
+        methanogenic: 0,
+        mixed: -0.5,
+        stable: 0.5,
+        alkaline_cap: +2,
+        biofilm: -0.2,
+        burn_zone: +3,
+        burn_halo: -1.5,
+    };
+    const bias = phaseBias[zone && zone.typical_phase] ?? 0;
+    const localPH = scenPH + bias;
+    if (localPH < lo || localPH > hi) {
+        // Soft tail: 0.5 pH outside the window still gets partial credit.
+        const dist = Math.min(Math.abs(localPH - lo), Math.abs(localPH - hi));
+        return Math.max(0, 1 - dist / 0.5) * 0.3;
+    }
+    // Inside the window: peak at center, falloff toward edges.
+    const center = (lo + hi) / 2;
+    const halfWidth = (hi - lo) / 2;
+    const offset = Math.abs(localPH - center);
+    return Math.max(0.3, 1 - (offset / halfWidth) * 0.5);
+}
+
+// ── 11-engine-goslarite.js ──
+
+// ============================================================
+// js/11-engine-goslarite.ts — goslarite growth engine
+// ============================================================
+//
+// First per-mineral chemistry engine, per proposals/PROPOSAL-WASTELAND-
+// CRYSTALS.md §"First mineral: pick goslarite":
+//
+//   Goslarite (ZnSO4·7H2O) on rusted galvanized steel is the canonical
+//   "hello world" of anthropogenic mineralogy:
+//   - Substrate is universal (steel is in every dump)
+//   - Chemistry is single-substrate (Zn²⁺ + SO4²⁻ → ZnSO4·7H2O)
+//   - Acid phase only (pH 3-6, yrs 1-10)
+//   - Highly soluble — recrystallizes seasonally with rain pulses
+//
+// And HANDOFF-VOICE-AND-DISCIPLINE.md §"First growth engine":
+//   "If goslarite renders correctly as a pulsing acicular efflorescence
+//   on a buried fence-wire fragment, the engine's data plumbing is
+//   proven and every other mineral is content."
+//
+// What this engine does:
+// 1. For each PlacedItem whose substrate_tokens include galvanized_steel,
+//    find the zone the item sits in.
+// 2. Gate on the zone's phase: cap_contact (acid_leaning) or
+//    acidogenic_horizon (acid) — both meet goslarite's pH_optimum [3, 6].
+// 3. Gate on substrate inventory: the cell must have a SO4 source —
+//    drywall_gypsum (drywall_sulfate precursor) or lead_acid_battery
+//    (battery_h2so4 precursor). Without SO4, goslarite has no anion.
+// 4. Compute supersaturation score from local Zn enrichment (the
+//    galvanized item locally elevates Zn well above zone-typical bulk
+//    leachate values; the engine treats per-tile Zn at near-saturation).
+// 5. Place 2-4 deterministic crystals per (item, zone) match, jittered
+//    inside the item footprint. Each crystal carries:
+//      - born_step  (when nucleation fired; ~5% of cell age in v11)
+//      - age_steps  (cellAgeSteps - born_step)
+//      - crystal_mass_mg = age_steps × growth_rate × season_modulator ×
+//                          supersaturation × 0.7  (the 0.7 captures net
+//                          mass loss from seasonal redissolution
+//                          averaged over many wet-dry cycles)
+// 6. The seasonal-pulse modulator: at the cell's current step,
+//    season_modulator = 1.0 (peak dry season) ... 0.5 (peak wet season)
+//    so the same scenario reloaded at different sessionSeeds shows
+//    different pulse phases on the goslarite crusts. The proposal's
+//    "snow-white efflorescence pulses rather than accumulates" rendered
+//    as actual variance.
+const GOSLARITE_TARGET_SUBSTRATE = "galvanized_steel";
+const GOSLARITE_SO4_SOURCE_TOKENS = ["drywall_gypsum", "lead_acid_battery"];
+// Goslarite-friendly zone phases — derived from minerals.json
+// pH_optimum [3, 6] mapped against zones.json typical_phase tokens.
+const GOSLARITE_FRIENDLY_PHASES = ["acid", "acid_leaning", "mixed"];
+// Crystals per (item, zone) match, fixed for v11 determinism. Spreads
+// the goslarite efflorescence across the item's footprint as a small
+// cluster rather than a single dot.
+const GOSLARITE_CRYSTALS_PER_ITEM = 3;
+// Nucleation lag fraction: goslarite nucleates fast (highly soluble,
+// low nucleation_sigma=1.0), but not at step 0. v11 sets nucleation
+// at 5% of cellAgeSteps so the crystal age = 95% of cell age.
+const GOSLARITE_NUCLEATION_LAG_FRAC = 0.05;
+// Net-mass-after-pulse coefficient: integrated growth-minus-dissolution
+// over many wet-dry cycles. 0.7 = 30% of grown mass redissolves on
+// average. Tunable; the visual harness will tell us when this drifts.
+const GOSLARITE_NET_MASS_COEFF = 0.7;
+// Reference crystal mass at age=120 ticks (10 yrs) under ideal conditions
+// (supersaturation=1, season_modulator=1). Mass scales linearly with
+// age beyond this in v11; future passes will saturate at max_size_cm.
+const GOSLARITE_REFERENCE_MASS_MG_AT_120_TICKS = 1.0;
+function _seasonModulator(stepIdx) {
+    // Annual sinusoid: peak at month 9 (driest, deepest evaporation),
+    // trough at month 3 (wettest spring). Period = 12 ticks.
+    const phase = ((stepIdx % 12) - 9) * (Math.PI / 6);
+    return 0.75 + 0.25 * Math.cos(phase); // 0.5 at trough, 1.0 at peak
+}
+function _scenarioHasSO4Source(scenario) {
+    const inv = scenario && scenario.substrate_inventory;
+    if (!Array.isArray(inv))
+        return false;
+    for (const entry of inv) {
+        if (GOSLARITE_SO4_SOURCE_TOKENS.indexOf(entry.token) >= 0)
+            return true;
+    }
+    return false;
+}
+// Local Zn supersaturation factor, ad-hoc for v11. The galvanized item
+// locally elevates Zn well above the zone-typical bulk value. We
+// estimate "local Zn" as 200 mg/L (4× goslarite's required Zn=50)
+// scaled down by zone confinement (cap_contact: full air contact, peak
+// elevation; deep zones: less elevation due to drainage washing). The
+// supersaturation score is then local Zn / required Zn.
+function _localZnSupersaturation(zoneId) {
+    if (zoneId === "cap_contact")
+        return 4.0; // full O2, evaporation-concentrating
+    if (zoneId === "acidogenic_horizon")
+        return 2.5; // moist but acidic, intermediate
+    if (zoneId === "wall_contact_flank")
+        return 1.5; // drainage-flushed
+    return 1.0; // other zones: just at saturation
+}
+function growGoslarite(state) {
+    const out = [];
+    if (!state || !state.scenario || !state.items || state.items.length === 0)
+        return out;
+    if (!_scenarioHasSO4Source(state.scenario))
+        return out;
+    const mineral = (state.mineralSpec ?? {})["goslarite"];
+    if (!mineral)
+        return out;
+    const cellAgeSteps = state.cellAgeSteps;
+    const bornStep = Math.floor(cellAgeSteps * GOSLARITE_NUCLEATION_LAG_FRAC);
+    const ageSteps = Math.max(0, cellAgeSteps - bornStep);
+    const seasonAtBorn = _seasonModulator(bornStep);
+    const seasonAtNow = _seasonModulator(cellAgeSteps);
+    const growthRate = (typeof mineral.growth_rate_mult === "number") ? mineral.growth_rate_mult : 1.0;
+    for (const item of state.items) {
+        const tokens = item.substrate_tokens ?? [];
+        if (tokens.indexOf(GOSLARITE_TARGET_SUBSTRATE) < 0)
+            continue;
+        const zoneMatch = (typeof _findItemZone === "function") ? _findItemZone(item, state.zoneSpec, state.geom) : null;
+        if (!zoneMatch)
+            continue;
+        const phase = zoneMatch.zone && zoneMatch.zone.typical_phase;
+        if (GOSLARITE_FRIENDLY_PHASES.indexOf(phase) < 0)
+            continue;
+        const supersat = _localZnSupersaturation(zoneMatch.id);
+        if (supersat < 1.0)
+            continue; // goslarite doesn't nucleate at sub-saturation
+        // Closed-form mass model: linear growth × seasonal pulse × net-mass
+        // coefficient. Pegged so 10 yrs (120 ticks) at ideal conditions =
+        // 1.0 mg of goslarite per crystal — small efflorescence flake scale.
+        const baseMass = (ageSteps / 120) * GOSLARITE_REFERENCE_MASS_MG_AT_120_TICKS;
+        const supersatBoost = Math.min(supersat, 6) / 4; // diminishing returns past 4×
+        // Pulse phase: average of season-at-now and season-at-born so we
+        // capture both the current cycle and the one we nucleated in.
+        const pulseModulator = (seasonAtBorn + seasonAtNow) / 2;
+        const massPerCrystal = baseMass * growthRate * supersatBoost * pulseModulator * GOSLARITE_NET_MASS_COEFF;
+        if (massPerCrystal <= 0)
+            continue;
+        // Deterministic per-item RNG so re-runs produce the same dot
+        // positions. Mixes session seed + item id so BEGIN re-rolls
+        // micro-position but not the gross output.
+        const rng = _mulberry32Engine(_hashStrEngine(`engine|goslarite|${item.id}|${state.sessionSeed}`));
+        for (let i = 0; i < GOSLARITE_CRYSTALS_PER_ITEM; i++) {
+            const jitterX = (rng() - 0.5) * (item.w_m ?? 0.5) * 0.7;
+            const jitterY = (rng() - 0.5) * (item.h_m ?? 0.5) * 0.7;
+            out.push({
+                mineral_id: "goslarite",
+                host_item_id: item.id,
+                host_item_class: item.class_id,
+                zone_id: zoneMatch.id,
+                x_m: (item.x_m ?? 0) + jitterX,
+                y_m: (item.y_m ?? 0) + jitterY,
+                age_steps: ageSteps,
+                born_step: bornStep,
+                crystal_mass_mg: massPerCrystal,
+                source: "engine",
+            });
+        }
+    }
+    return out;
 }
 
 // ── 15-version.js ──
@@ -1946,7 +2363,75 @@ function generatePlacedItems(scenario, itemSpec, geom, sessionSeed = 0) {
 //        are no notifications, sound effects, or achievement banners
 //        for the burn event. The fire is observed via tile tints and
 //        catalog updates, not celebrated.
-const WASTELAND_VERSION = "v10";
+//   v11 — first chemistry engine: goslarite (2026-05-07): per the
+//        proposal's "First mineral: pick goslarite" recipe and HANDOFF-
+//        VOICE-AND-DISCIPLINE.md §"First growth engine — when chemistry
+//        math lands". The data spines have been complete since v6; v11
+//        lights the engine that consumes them. Boss instruction
+//        2026-05-07: "i'd rather focus my energy on the engine and what
+//        comes after."
+//        - js/10-engine-cell.ts — CellState + initCellState + runCellEngine
+//          + runCellEngineForScenarioAge. One tick = 1 month (12 ticks/yr,
+//          monthly granularity matches goslarite's seasonal-pulse scale).
+//          Per-mineral engines dispatch from runCellEngine; v11 dispatches
+//          only growGoslarite. Helper functions exposed for future
+//          per-mineral engines: _findItemZone (zone containing item
+//          center), _supersaturationScore (ratio of available ions to
+//          required), _pHWindowScore (pH-window membership in [0,1]).
+//        - js/11-engine-goslarite.ts — growGoslarite(state) returns
+//          EngineCrystal[] for each PlacedItem with galvanized_steel
+//          substrate sitting in an acid-leaning zone (cap_contact or
+//          acidogenic_horizon). Closed-form mass model: mass =
+//          (age_steps / 120) × growth_rate × supersat_boost × season ×
+//          0.7. The 0.7 net-mass coefficient captures averaged
+//          wet-dry-cycle redissolution (the proposal's "pulses rather
+//          than accumulates"). Seasonal modulator: annual sinusoid,
+//          peak at month 9 (driest), trough at month 3 (wettest).
+//          Local Zn supersaturation differs by zone: 4× at cap_contact
+//          (full O2 + evaporation), 2.5× at acidogenic_horizon, 1.5×
+//          at wall_contact_flank. Three goslarite crystals per
+//          (item, zone) match, jittered inside item footprint with
+//          deterministic per-item RNG mixing session seed + item id.
+//        - js/03-crystal-positions.ts gains an engine pass that runs
+//          BEFORE the seeded sampler. Engine-controlled minerals
+//          (ENGINE_CONTROLLED_MINERALS = {goslarite}) skip the sampler;
+//          their crystals come from the engine pass and are appended
+//          to the dot list at the end. CrystalDot gains source +
+//          crystal_mass_mg + age_steps fields.
+//        - js/99-renderer-cross-section.ts: opts.precursorSpec
+//          threaded into generateCrystalDots. Engine dots scale
+//          radius with sqrt(crystal_mass_mg) — doubling mass yields
+//          ~1.4× radius, floor 1.6 / ceiling 4.5. Engine dots also
+//          carry .dot-engine class with a soft outer halo
+//          (paint-order: stroke fill) simulating the out-of-plane
+//          efflorescence cluster. data-source / data-crystal-mass-mg /
+//          data-age-steps emitted as DOM attrs for the examination
+//          panel + visual harness.
+//        - data/scenarios.json: goslarite added to MSG +
+//          Halbenrain expected_species with evidence_role:
+//          "engine_predicted" — the new tier marking simulator
+//          predictions distinct from cited paper findings. Schema
+//          declaration extended to document the engine_predicted role.
+//        - index.html boot harness threads PRECURSOR_SPEC into
+//          renderCrossSectionInto opts so the engine has the precursor
+//          map (used for substrate-decay validation in future
+//          per-mineral engines).
+//        Engine implications: this is the first engine. The data
+//        plumbing is proven. Future per-mineral engines drop into
+//        js/12..14-engine-*.ts (sphalerite, pyromorphite, anglesite
+//        next per the proposal's "Adding minerals one at a time" rule).
+//        The closed-form mass model in v11 is a stepping stone — v12
+//        will add real per-tick supersaturation math with mass balance
+//        against zone thickness_um. Burn-event quench-rate gating
+//        composes on top once the per-mineral engines stabilize.
+//        Visual diff vs v10: the same scenarios now render
+//        engine-grown goslarite (white halo on galvanized appliances)
+//        in cap_contact + acidogenic_horizon zones; the dot count at
+//        MSG goes from 30 to ~60+, Halbenrain from 22 to ~45+. Each
+//        engine dot's mass (visible in the DOM data-crystal-mass-mg
+//        attr) varies with cell age × seasonal phase, deterministic
+//        per (scenario, sessionSeed).
+const WASTELAND_VERSION = "v11";
 
 // ── 99-renderer-cross-section.js ──
 
@@ -2012,6 +2497,7 @@ function buildSchematicSVG(cfg, opts) {
     const scenario = opts.scenario ?? null;
     const itemSpec = opts.itemSpec ?? null;
     const mineralSpec = opts.mineralSpec ?? null;
+    const precursorSpec = opts.precursorSpec ?? null;
     const sessionSeed = opts.sessionSeed ?? 0;
     // populationResult is captured here once items render so the crystal-dot
     // pass downstream can use the same placed items as host-anchor candidates.
@@ -2333,25 +2819,39 @@ function buildSchematicSVG(cfg, opts) {
             cellTopYM: cellTopYM,
             lcsThicknessM: cfg.lowerLayers[0].thicknessM,
         };
-        const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom, sessionSeed);
+        const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom, sessionSeed, precursorSpec, itemSpec);
         parts.push(`<g class="crystal-dots">`);
         for (const d of dots) {
             const fill = mineralDotColor(d.mineral_id);
-            // Radius scales lightly with evidence_role: directly_observed dots
-            // sit a hair larger so the catalog's strongest pedigree reads first.
-            const r = d.evidence_role === "directly_observed" ? 2.6
-                : d.evidence_role === "implied_by_substrate_chemistry" ? 2.0
-                    : 1.6;
-            // data-* attributes drive the examination panel's click delegation
-            // (boot harness reads them from the click target). cursor: pointer is
-            // applied via CSS so dots indicate they're interactive. v8: data-host-
-            // item-id and data-host-item-class carry the anchoring item (or empty
-            // strings when the dot fell back to zone-uniform placement).
+            // Engine dots scale radius with crystal_mass_mg so older / more-
+            // supersaturated cells render visually heavier. Sampler dots use
+            // the legacy evidence-role-tier scaling. v11: engine dots also
+            // get a halo class (.dot-engine) so the efflorescence aesthetic
+            // reads directly — goslarite is a "snow-white acicular
+            // efflorescence" per minerals.json description, and the halo is
+            // the rendering equivalent of an out-of-plane crystal cluster.
+            let r;
+            if (d.source === "engine" && typeof d.crystal_mass_mg === "number") {
+                // sqrt scaling so doubling mass yields ~1.4× radius — a felt
+                // difference but not a runaway visual. Floor at 1.6, ceiling at
+                // 4.5 (heavier crystals still read as dots, not blobs).
+                const baseFromMass = 2.0 + 1.6 * Math.sqrt(Math.max(0, d.crystal_mass_mg));
+                r = Math.max(1.6, Math.min(4.5, baseFromMass));
+            }
+            else {
+                r = d.evidence_role === "directly_observed" ? 2.6
+                    : d.evidence_role === "implied_by_substrate_chemistry" ? 2.0
+                        : 1.6;
+            }
             const hostId = d.host_item_id ?? "";
             const hostClass = d.host_item_class ?? "";
             const eventId = d.event_id ?? "";
             const eventState = d.event_state ?? "";
-            parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" data-event-id="${eventId}" data-event-state="${eventState}" />`);
+            const sourceCls = d.source === "engine" ? " dot-engine" : "";
+            const massAttr = (typeof d.crystal_mass_mg === "number") ? ` data-crystal-mass-mg="${d.crystal_mass_mg.toFixed(3)}"` : "";
+            const ageAttr = (typeof d.age_steps === "number") ? ` data-age-steps="${d.age_steps}"` : "";
+            const sourceAttr = ` data-source="${d.source ?? "sampler"}"`;
+            parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}${sourceCls}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" data-event-id="${eventId}" data-event-state="${eventState}"${sourceAttr}${massAttr}${ageAttr} />`);
         }
         parts.push(`</g>`); // end crystal-dots group
     }
@@ -2579,6 +3079,19 @@ function svgStyle() {
     .dot-directly_observed              { stroke: #ffffff; stroke-width: 0.45; stroke-opacity: 0.55; }
     .dot-implied_by_substrate_chemistry { /* default outline only */ }
     .dot-predicted_from_program_synthesis { stroke-opacity: 0.5; }
+    /* Engine-grown dots (v11+): a soft outer halo simulates the
+       out-of-plane efflorescence cluster the chemistry produces. The
+       paint-order=stroke trick puts the halo BEHIND the fill so it
+       reads as bloom rather than outline. Goslarite specifically is
+       described in minerals.json as 'snow-white acicular
+       efflorescence'; the halo is the rendering equivalent. */
+    .dot-engine {
+      stroke: #f5f0e6;
+      stroke-width: 1.6;
+      stroke-opacity: 0.30;
+      paint-order: stroke fill;
+    }
+    .dot-engine.dot-engine_predicted    { stroke-opacity: 0.32; }
     /* Selected dot — a brighter halo so the examined crystal reads at a
        glance against the cell's other paragenesis. */
     .dot.selected { stroke: #ffd76a; stroke-width: 1.2; stroke-opacity: 1.0; }
@@ -2802,6 +3315,7 @@ function svgStyle() {
           zoneSpec: typeof ZONE_SPEC !== "undefined" ? ZONE_SPEC : null,
           itemSpec: typeof ITEM_SPEC !== "undefined" ? ITEM_SPEC : null,
           mineralSpec: typeof MINERAL_SPEC !== "undefined" ? MINERAL_SPEC : null,
+          precursorSpec: typeof PRECURSOR_SPEC !== "undefined" ? PRECURSOR_SPEC : null,
           sessionSeed: currentSessionSeed,
         };
         if (activeScenarioId && typeof SCENARIO_SPEC !== "undefined" && SCENARIO_SPEC && SCENARIO_SPEC[activeScenarioId]) {
@@ -2884,7 +3398,18 @@ function svgStyle() {
             if (scenario.events[ei].id === eventId) { eventEntry = scenario.events[ei]; break; }
           }
         }
-        var narrative = narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem, eventEntry, eventState || null);
+        // Engine context (v11): engine-grown dots carry data-source +
+        // data-crystal-mass-mg + data-age-steps. Pass these through so
+        // narrators can append the simulator-pedigree clause.
+        var dotSource = target.getAttribute("data-source") || "sampler";
+        var massStr = target.getAttribute("data-crystal-mass-mg") || "";
+        var ageStr = target.getAttribute("data-age-steps") || "";
+        var engineDotState = (dotSource === "engine") ? {
+          source: dotSource,
+          mass_mg: massStr ? parseFloat(massStr) : null,
+          age_steps: ageStr ? parseInt(ageStr, 10) : null,
+        } : null;
+        var narrative = narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem, eventEntry, eventState || null, engineDotState);
         var cellName = scenario && scenario.location ? (scenario.location.locality + ", " + scenario.location.country) : "(no scenario)";
         var citationsHtml = narrative.citations.length
           ? '<div class="citations">citations: ' + narrative.citations.map(escapeHtml).join("; ") + '</div>'

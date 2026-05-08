@@ -97,6 +97,7 @@ interface RenderOpts {
   scenario?: any | null;  // ScenarioEntry from 01-scenario-spec; when set, zones filter to scenario.active_zones and crystal dots render
   itemSpec?: { [id: string]: any } | null;  // ItemClassEntry map from 06-item-spec; when set with scenario, items render
   mineralSpec?: { [id: string]: any } | null;  // MineralEntry map from 00-mineral-spec; used by the dot generator for substrate-aware host anchoring (v8)
+  precursorSpec?: { [id: string]: any } | null;  // PrecursorEntry map from 05-precursor-spec; used by the engine for substrate-decay validation (v11)
   sessionSeed?: number | null;  // mixed into item-placement and crystal-dot hashes so each BEGIN click yields a different physical layout (v9). null = baseline deterministic.
 }
 
@@ -111,6 +112,7 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
   const scenario = opts.scenario ?? null;
   const itemSpec = opts.itemSpec ?? null;
   const mineralSpec = opts.mineralSpec ?? null;
+  const precursorSpec = opts.precursorSpec ?? null;
   const sessionSeed = opts.sessionSeed ?? 0;
   // populationResult is captured here once items render so the crystal-dot
   // pass downstream can use the same placed items as host-anchor candidates.
@@ -448,25 +450,38 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
       cellTopYM: cellTopYM,
       lcsThicknessM: cfg.lowerLayers[0].thicknessM,
     };
-    const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom, sessionSeed);
+    const dots = generateCrystalDots(scenario, zoneSpec, mineralSpec, placedItemsList, geom, sessionSeed, precursorSpec, itemSpec);
     parts.push(`<g class="crystal-dots">`);
     for (const d of dots) {
       const fill = mineralDotColor(d.mineral_id);
-      // Radius scales lightly with evidence_role: directly_observed dots
-      // sit a hair larger so the catalog's strongest pedigree reads first.
-      const r = d.evidence_role === "directly_observed" ? 2.6
-              : d.evidence_role === "implied_by_substrate_chemistry" ? 2.0
-              : 1.6;
-      // data-* attributes drive the examination panel's click delegation
-      // (boot harness reads them from the click target). cursor: pointer is
-      // applied via CSS so dots indicate they're interactive. v8: data-host-
-      // item-id and data-host-item-class carry the anchoring item (or empty
-      // strings when the dot fell back to zone-uniform placement).
+      // Engine dots scale radius with crystal_mass_mg so older / more-
+      // supersaturated cells render visually heavier. Sampler dots use
+      // the legacy evidence-role-tier scaling. v11: engine dots also
+      // get a halo class (.dot-engine) so the efflorescence aesthetic
+      // reads directly — goslarite is a "snow-white acicular
+      // efflorescence" per minerals.json description, and the halo is
+      // the rendering equivalent of an out-of-plane crystal cluster.
+      let r: number;
+      if (d.source === "engine" && typeof d.crystal_mass_mg === "number") {
+        // sqrt scaling so doubling mass yields ~1.4× radius — a felt
+        // difference but not a runaway visual. Floor at 1.6, ceiling at
+        // 4.5 (heavier crystals still read as dots, not blobs).
+        const baseFromMass = 2.0 + 1.6 * Math.sqrt(Math.max(0, d.crystal_mass_mg));
+        r = Math.max(1.6, Math.min(4.5, baseFromMass));
+      } else {
+        r = d.evidence_role === "directly_observed" ? 2.6
+          : d.evidence_role === "implied_by_substrate_chemistry" ? 2.0
+          : 1.6;
+      }
       const hostId = d.host_item_id ?? "";
       const hostClass = d.host_item_class ?? "";
       const eventId = d.event_id ?? "";
       const eventState = d.event_state ?? "";
-      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" data-event-id="${eventId}" data-event-state="${eventState}" />`);
+      const sourceCls = d.source === "engine" ? " dot-engine" : "";
+      const massAttr = (typeof d.crystal_mass_mg === "number") ? ` data-crystal-mass-mg="${d.crystal_mass_mg.toFixed(3)}"` : "";
+      const ageAttr = (typeof d.age_steps === "number") ? ` data-age-steps="${d.age_steps}"` : "";
+      const sourceAttr = ` data-source="${d.source ?? "sampler"}"`;
+      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}${sourceCls}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" data-event-id="${eventId}" data-event-state="${eventState}"${sourceAttr}${massAttr}${ageAttr} />`);
     }
     parts.push(`</g>`); // end crystal-dots group
   }
@@ -710,6 +725,19 @@ function svgStyle(): string {
     .dot-directly_observed              { stroke: #ffffff; stroke-width: 0.45; stroke-opacity: 0.55; }
     .dot-implied_by_substrate_chemistry { /* default outline only */ }
     .dot-predicted_from_program_synthesis { stroke-opacity: 0.5; }
+    /* Engine-grown dots (v11+): a soft outer halo simulates the
+       out-of-plane efflorescence cluster the chemistry produces. The
+       paint-order=stroke trick puts the halo BEHIND the fill so it
+       reads as bloom rather than outline. Goslarite specifically is
+       described in minerals.json as 'snow-white acicular
+       efflorescence'; the halo is the rendering equivalent. */
+    .dot-engine {
+      stroke: #f5f0e6;
+      stroke-width: 1.6;
+      stroke-opacity: 0.30;
+      paint-order: stroke fill;
+    }
+    .dot-engine.dot-engine_predicted    { stroke-opacity: 0.32; }
     /* Selected dot — a brighter halo so the examined crystal reads at a
        glance against the cell's other paragenesis. */
     .dot.selected { stroke: #ffd76a; stroke-width: 1.2; stroke-opacity: 1.0; }

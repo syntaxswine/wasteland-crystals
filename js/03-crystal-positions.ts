@@ -39,7 +39,19 @@ interface CrystalDot {
   host_item_class: string | null;  // class_id of the host item ("lead_acid_battery"); null when no item-anchor
   event_id?: string | null;        // when set, the event this dot belongs to (per HANDOFF-BURN-ZONE.md events overlay)
   event_state?: string | null;     // "burning" | "halo" | "frozen_metastable" — which ring of the event hosts this dot
+  source?: "sampler" | "engine";   // v11: distinguishes seeded-sampler dots from chemistry-engine dots
+  crystal_mass_mg?: number | null; // v11: when source=engine, the engine-computed mass — drives dot-radius scaling
+  age_steps?: number | null;       // v11: when source=engine, ticks since nucleation
 }
+
+// Minerals whose dots come from the chemistry engine (js/10-engine-cell.ts +
+// per-mineral js/11..14-engine-*.ts) rather than the seeded sampler.
+// v11: goslarite only. As more per-mineral engines land in v12+, add
+// their ids here; the sampler will skip them and the engine output
+// will be merged into the dot list at the end of generateCrystalDots.
+const ENGINE_CONTROLLED_MINERALS: { [id: string]: true } = {
+  goslarite: true,
+};
 
 // Per-mineral display color. Tokens come from minerals.json color_visual but
 // the renderer carries the canonical hex mapping (similar to how host-rock
@@ -323,14 +335,37 @@ function generateCrystalDots(
   items: any[] | null,
   geom: CellGeomInput,
   sessionSeed: number = 0,
+  precursorSpec: { [id: string]: any } | null = null,
+  itemSpec: { [id: string]: any } | null = null,
 ): CrystalDot[] {
   const dots: CrystalDot[] = [];
   if (!scenario || !zoneSpec) return dots;
 
   const itemList = items ?? [];
 
+  // ── Chemistry engine pass (v11) ──
+  // Run the per-mineral chemistry engines first, BEFORE the seeded
+  // sampler, so engine output can stand alone for engine-controlled
+  // minerals. Engine output is appended to dots at the end so it
+  // composes with the sampler dots for non-engine-controlled minerals.
+  // The engine reads the cell's leachate chemistry, zone phases, and
+  // item substrate inventory; sampler stays as the steady-state
+  // zone-cluster placement for unengine'd minerals.
+  let engineCrystals: EngineCrystal[] = [];
+  if (typeof initCellState === "function" && typeof runCellEngineForScenarioAge === "function") {
+    const state = initCellState(scenario, zoneSpec, mineralSpec, itemSpec, precursorSpec, itemList, geom, sessionSeed);
+    runCellEngineForScenarioAge(state);
+    engineCrystals = state.crystals;
+  }
+
   const expectedSpecies = scenario.expected_species ?? {};
   for (const mineralId of Object.keys(expectedSpecies)) {
+    // Skip engine-controlled minerals — their dots come from the engine
+    // pass below, not from the seeded sampler. This keeps the sampler
+    // out of the way of the chemistry math for minerals where the
+    // chemistry math actually runs.
+    if (ENGINE_CONTROLLED_MINERALS[mineralId]) continue;
+
     const speciesEntry = expectedSpecies[mineralId];
     const role = speciesEntry.evidence_role;
     const dotsPerZone = _dotsForRole(role);
@@ -401,7 +436,7 @@ function generateCrystalDots(
     // to ring-uniform sampling.
     const events = Array.isArray(scenario.events) ? scenario.events : [];
     const eventStates = _eventStatesForMineral(mineralEntry);
-    if (events.length > 0 && eventStates.length > 0) {
+    if (events.length > 0 && eventStates.length > 0 && !ENGINE_CONTROLLED_MINERALS[mineralId]) {
       for (const ev of events) {
         for (const state of eventStates) {
           const candidateHosts: any[] = mineralSubstrates.length > 0
@@ -448,5 +483,33 @@ function generateCrystalDots(
       }
     }
   }
+
+  // ── Engine output merge ──
+  // Append engine-grown crystals as CrystalDot entries with source:"engine"
+  // and crystal_mass_mg set. The renderer scales radius with mass for
+  // engine dots; the examination panel reads source/mass to label the
+  // crystal as engine-grown ("simulator prediction"). Engine evidence_role
+  // resolves through scenario.expected_species when listed there;
+  // otherwise defaults to "engine_predicted" so the panel reads the
+  // correct surveyor-vs-simulator pedigree.
+  for (const ec of engineCrystals) {
+    const declared = scenario.expected_species?.[ec.mineral_id];
+    const role = declared ? declared.evidence_role : "engine_predicted";
+    dots.push({
+      x_m: ec.x_m,
+      y_m: ec.y_m,
+      mineral_id: ec.mineral_id,
+      evidence_role: role,
+      zone_id: ec.zone_id,
+      host_item_id: ec.host_item_id ?? null,
+      host_item_class: ec.host_item_class ?? null,
+      event_id: null,
+      event_state: null,
+      source: "engine",
+      crystal_mass_mg: ec.crystal_mass_mg,
+      age_steps: ec.age_steps,
+    });
+  }
+
   return dots;
 }

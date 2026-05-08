@@ -13,6 +13,7 @@
     "excavation_year": "Year the characterization study was performed (not when the cell was filled).",
     "citations": "Primary characterization papers. Use the same short-form 'Author Year Journal Vol:Page' convention as minerals.json.",
     "evidence_level": "Parallel to mineral catalog: landfill_specific (peer-reviewed characterization of this exact site) | program_synthesis (this site contributed to a multi-site review whose findings are reported jointly) | chemistry_archetype (no real-site characterization; the scenario is an archetypal recipe).",
+    "evidence_role_engine": "v11+: 'engine_predicted' marks an expected_species entry whose dots come from the chemistry engine (js/10-engine-cell.ts + js/11..N-engine-*.ts) rather than the seeded sampler. The engine reads scenario chemistry and item substrate inventory deterministically; engine_predicted entries are the simulator's predictions, distinct from the cited paper's findings (directly_observed) or the surveyor's chemistry-grounded guesses (implied_by_substrate_chemistry / predicted_from_program_synthesis).",
     "waste_age_years": "Approximate age of the waste at characterization time. Drives the dominant_phase default.",
     "dominant_phase": "Leachate phase governing the cell at characterization time: acid (yrs 1-10) | methanogenic (decades) | stable (centuries) | alkaline_cap (cement-dominated) | burn_zone (post-incineration). Multiple lifts in a real cell live in different phases simultaneously; this is the reported governing phase for the characterization horizon.",
     "substrate_inventory": "Array of substrate-token entries with {token, evidence_basis, note}. evidence_basis: 'documented' (the cited paper specifically names this substrate in this cell) | 'implied_typical_msw' (a typical MSW-cell component the citation paper did not specifically characterize but whose presence is implied by the cell type and waste-stream composition). Narrators (js/04-narrators.ts) compose paragenesis from precursors whose source_substrate appears here, hedging language for implied_typical_msw entries so the prose stays honest about evidence pedigree.",
@@ -116,6 +117,10 @@
         "calcite": {
           "evidence_role": "implied_by_substrate_chemistry",
           "note": "Late-stage Ca-CO3 from the C&D fraction neutralizing residual acid and capping the late paragenesis. Documented broadly in mature MSW cells (Bennett/Fleming clogging review); likely present at Mont-Saint-Guibert by chemistry, not named in the cited fines paper."
+        },
+        "goslarite": {
+          "evidence_role": "engine_predicted",
+          "note": "v11 chemistry engine predicts goslarite acicular efflorescence on the cell's galvanized fines (refrigerator + washing-machine + water-heater shells, Fe-Zn alloy fragments) in cap_contact and acidogenic_horizon zones where local Zn²⁺ from corrosion meets drywall-derived sulfate at acid-leaning pH. Highly soluble — the engine renders it as a pulsing crust, mass scaled by cell age + season. Garcia Lopez did not focus on goslarite specifically, but the underlying chemistry (galvanized substrate + acid SO4 leachate) ran for the cell's first decade and the documentation gap is observational, not mechanistic."
         }
       },
       "player_brief": "Mont-Saint-Guibert cell, Walloon Brabant. Closed 2008, excavated by NEW-MINE in 2018 to characterize the <4.5 mm fines fraction. The cell is the Pb/Zn reference standard for the European ELFM corpus: olive-green pyromorphite hexagonal prisms on lead-acid battery relics, amber sphalerite tetrahedra on Fe-Zn alloy fragments, the four-way Pb-PO4-Cl-Ca convergence reading as deliberately engineered though it accumulated by accident over thirty years of methanogenic stability. Garcia Lopez SEM-EDS catalog is the working ground truth."
@@ -196,6 +201,10 @@
         "anglesite": {
           "evidence_role": "implied_by_substrate_chemistry",
           "note": "Same chemical-necessity argument as Mont-Saint-Guibert — relict acidic-phase weathering of battery Pb under SO4-bearing leachate."
+        },
+        "goslarite": {
+          "evidence_role": "engine_predicted",
+          "note": "v11 chemistry engine predicts goslarite efflorescence at higher density than Mont-Saint-Guibert because Halbenrain's acidogenic_horizon is still actively running — acidic chemistry has not yet drained into the methanogenic front, so goslarite formation continues at the present-day surveyed snapshot rather than relict only. The engine's seasonal-pulse modulator gives goslarite mass that scales with both cell age and current-tick season phase."
         }
       },
       "player_brief": "Halbenrain cell, Styria. NEW-MINE confirmation excavation in the same program lineage as Mont-Saint-Guibert, characterized at program-synthesis granularity rather than site-specific SEM-EDS. The cell sits two phase-shifts earlier than Mont-Saint-Guibert: still actively methanogenic, sulfide chemistry still running, late-phase pyromorphite seed crystals forming but not yet at the grain sizes the Belgian fines paper reported. Read the cell as a paragenesis-in-progress rather than a closed system."

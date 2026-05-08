@@ -384,4 +384,73 @@
 //        for the burn event. The fire is observed via tile tints and
 //        catalog updates, not celebrated.
 
-const WASTELAND_VERSION = "v10";
+//   v11 — first chemistry engine: goslarite (2026-05-07): per the
+//        proposal's "First mineral: pick goslarite" recipe and HANDOFF-
+//        VOICE-AND-DISCIPLINE.md §"First growth engine — when chemistry
+//        math lands". The data spines have been complete since v6; v11
+//        lights the engine that consumes them. Boss instruction
+//        2026-05-07: "i'd rather focus my energy on the engine and what
+//        comes after."
+//        - js/10-engine-cell.ts — CellState + initCellState + runCellEngine
+//          + runCellEngineForScenarioAge. One tick = 1 month (12 ticks/yr,
+//          monthly granularity matches goslarite's seasonal-pulse scale).
+//          Per-mineral engines dispatch from runCellEngine; v11 dispatches
+//          only growGoslarite. Helper functions exposed for future
+//          per-mineral engines: _findItemZone (zone containing item
+//          center), _supersaturationScore (ratio of available ions to
+//          required), _pHWindowScore (pH-window membership in [0,1]).
+//        - js/11-engine-goslarite.ts — growGoslarite(state) returns
+//          EngineCrystal[] for each PlacedItem with galvanized_steel
+//          substrate sitting in an acid-leaning zone (cap_contact or
+//          acidogenic_horizon). Closed-form mass model: mass =
+//          (age_steps / 120) × growth_rate × supersat_boost × season ×
+//          0.7. The 0.7 net-mass coefficient captures averaged
+//          wet-dry-cycle redissolution (the proposal's "pulses rather
+//          than accumulates"). Seasonal modulator: annual sinusoid,
+//          peak at month 9 (driest), trough at month 3 (wettest).
+//          Local Zn supersaturation differs by zone: 4× at cap_contact
+//          (full O2 + evaporation), 2.5× at acidogenic_horizon, 1.5×
+//          at wall_contact_flank. Three goslarite crystals per
+//          (item, zone) match, jittered inside item footprint with
+//          deterministic per-item RNG mixing session seed + item id.
+//        - js/03-crystal-positions.ts gains an engine pass that runs
+//          BEFORE the seeded sampler. Engine-controlled minerals
+//          (ENGINE_CONTROLLED_MINERALS = {goslarite}) skip the sampler;
+//          their crystals come from the engine pass and are appended
+//          to the dot list at the end. CrystalDot gains source +
+//          crystal_mass_mg + age_steps fields.
+//        - js/99-renderer-cross-section.ts: opts.precursorSpec
+//          threaded into generateCrystalDots. Engine dots scale
+//          radius with sqrt(crystal_mass_mg) — doubling mass yields
+//          ~1.4× radius, floor 1.6 / ceiling 4.5. Engine dots also
+//          carry .dot-engine class with a soft outer halo
+//          (paint-order: stroke fill) simulating the out-of-plane
+//          efflorescence cluster. data-source / data-crystal-mass-mg /
+//          data-age-steps emitted as DOM attrs for the examination
+//          panel + visual harness.
+//        - data/scenarios.json: goslarite added to MSG +
+//          Halbenrain expected_species with evidence_role:
+//          "engine_predicted" — the new tier marking simulator
+//          predictions distinct from cited paper findings. Schema
+//          declaration extended to document the engine_predicted role.
+//        - index.html boot harness threads PRECURSOR_SPEC into
+//          renderCrossSectionInto opts so the engine has the precursor
+//          map (used for substrate-decay validation in future
+//          per-mineral engines).
+//        Engine implications: this is the first engine. The data
+//        plumbing is proven. Future per-mineral engines drop into
+//        js/12..14-engine-*.ts (sphalerite, pyromorphite, anglesite
+//        next per the proposal's "Adding minerals one at a time" rule).
+//        The closed-form mass model in v11 is a stepping stone — v12
+//        will add real per-tick supersaturation math with mass balance
+//        against zone thickness_um. Burn-event quench-rate gating
+//        composes on top once the per-mineral engines stabilize.
+//        Visual diff vs v10: the same scenarios now render
+//        engine-grown goslarite (white halo on galvanized appliances)
+//        in cap_contact + acidogenic_horizon zones; the dot count at
+//        MSG goes from 30 to ~60+, Halbenrain from 22 to ~45+. Each
+//        engine dot's mass (visible in the DOM data-crystal-mass-mg
+//        attr) varies with cell age × seasonal phase, deterministic
+//        per (scenario, sessionSeed).
+
+const WASTELAND_VERSION = "v11";
