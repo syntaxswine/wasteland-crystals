@@ -448,11 +448,13 @@ _loadZoneSpec();
 // can keep consuming the same data.
 // Minerals whose dots come from the chemistry engine (js/10-engine-cell.ts +
 // per-mineral js/11..14-engine-*.ts) rather than the seeded sampler.
-// v11: goslarite only. As more per-mineral engines land in v12+, add
-// their ids here; the sampler will skip them and the engine output
-// will be merged into the dot list at the end of generateCrystalDots.
+// One mineral per per-mineral engine, per the proposal's "one mineral
+// at a time" rule (boss instruction 2026-05-08): solo minerals ship
+// + test independently; only paragenesis-linked minerals (Pb suite —
+// anglesite + pyromorphite + galena — when those land) ship together.
 const ENGINE_CONTROLLED_MINERALS = {
-    goslarite: true,
+    goslarite: true, // v11 — acid-oxidizing Zn fate
+    sphalerite: true, // v12 — methanogenic-reducing Zn fate (chemistry-flip of goslarite)
 };
 // Per-mineral display color. Tokens come from minerals.json color_visual but
 // the renderer carries the canonical hex mapping (similar to how host-rock
@@ -1000,11 +1002,35 @@ function _narratePyromorphite(scenario, zoneId, available) {
         : `At ${cell}'s basal stable horizon, ${convergence} converged on the lingering Pb²⁺. The four-way Pb-PO₄-Cl-Ca composition crystallized as the olive-green hexagonal prisms Garcia Lopez identified in the <4.5 mm fines fraction. Fortuitous chemistry, fully assembled by accident.`;
     return `${acidClause.charAt(0).toUpperCase() + acidClause.slice(1)} into the acidogenic-phase pore water. The methanogenic core then ran for two decades — sulfate-reducers consumed residual SO₄, kept dissolved Pb mobile, and let it migrate downward through the cell's wall-drainage path. ${closing}`;
 }
-function _narrateSphalerite(scenario, _zoneId, available) {
+function _narrateSphalerite(scenario, zoneId, available, engineState) {
     const cell = _scenarioCellName(scenario);
     const zincSource = _phrase("galvanized_zinc_dissolution", available) ?? "Zn²⁺ from corroding galvanized substrate";
     const sulfideSource = _phraseAny(["drywall_sulfate_to_biogenic_h2s", "battery_sulfate_to_biogenic_h2s"], available) ?? "biogenic H₂S from sulfate-reducer activity on residual SO4";
-    return `Galvanized steel — fence wire, ductwork, appliance shells — corroded under early acidic leachate, dropping ${zincSource} into solution. Drywall- and battery-derived sulfate, processed by anaerobic sulfate-reducers in the methanogenic phase, became ${sulfideSource}. Where dissolved Zn met dissolved sulfide the reaction was nearly diffusion-limited: ZnS precipitated as resinous-luster tetrahedra coating the surviving Fe-Zn alloy fragments. Garcia Lopez's SEM-EDS catalog from Mont-Saint-Guibert reports the same texture in its <4.5 mm fines, honey-amber to dark brown depending on residual iron content; ${cell} runs the same chemistry on the same substrate.`;
+    // Tire-pyrolysis branch: when zoneId is a synthetic event-zone,
+    // sphalerite came from the burn-event char path, not steady-state
+    // biogenic chemistry. Narrate accordingly so the prose tracks the
+    // mechanism. zoneId starts with "event:" only for the burn-event
+    // branch (per js/12-engine-sphalerite.ts).
+    if (typeof zoneId === "string" && zoneId.indexOf("event:") === 0) {
+        const tireChar = _phrase("tire_pyrolysis_zns_char", available) ?? "ZnS-rich tire-pyrolysis char";
+        const burnState = zoneId.split(":")[2] ?? "burn footprint";
+        const stateLabel = burnState === "burning" ? "the active fire core" :
+            burnState === "halo" ? "the cooling halo's alteration ring" :
+                burnState === "frozen_metastable" ? "the front's trailing edge where the chemistry is locked" : burnState;
+        const burnPart = `Where the burn front pyrolyzed buried tires at 400–700°C, the rubber matrix concentrated ZnS in the post-burn char (Polymers 2023 review): ${tireChar}. As the char migrated into ${stateLabel}, the sulfide reservoir didn't have to wait for sulfate-reducer chemistry to assemble — the tire fire had already done that work at temperature. ZnS recrystallized as resinous-luster tetrahedra directly on the carbonized rubber substrate. The same mineral the cell's methanogenic core grows by biogenic H₂S from drywall sulfate; here, by pyrolysis from the tire's own embedded sulfur and zinc oxide vulcanization additive.`;
+        if (engineState && typeof engineState.mass_mg === "number" && typeof engineState.age_steps === "number") {
+            const ageYears = (engineState.age_steps / 12).toFixed(1);
+            return `${burnPart}\n\nSimulator state: ${ageYears} years of cell-time accumulation since nucleation, integrated mass ${engineState.mass_mg.toFixed(2)} mg. Engine path: tire-pyrolysis ZnS-char (burn-overlay branch). Same crystal habit as the methanogenic-core sphalerite, different precursor route.`;
+        }
+        return burnPart;
+    }
+    // Steady-state methanogenic path.
+    const base = `Galvanized steel — fence wire, ductwork, appliance shells — corroded under early acidic leachate, dropping ${zincSource} into solution. Drywall- and battery-derived sulfate, processed by anaerobic sulfate-reducers in the methanogenic phase, became ${sulfideSource}. Where dissolved Zn met dissolved sulfide the reaction was nearly diffusion-limited: ZnS precipitated as resinous-luster tetrahedra coating the surviving Fe-Zn alloy fragments. Garcia Lopez's SEM-EDS catalog from Mont-Saint-Guibert reports the same texture in its <4.5 mm fines, honey-amber to dark brown depending on residual iron content; ${cell} runs the same chemistry on the same substrate.`;
+    if (engineState && typeof engineState.mass_mg === "number" && typeof engineState.age_steps === "number") {
+        const ageYears = (engineState.age_steps / 12).toFixed(1);
+        return `${base}\n\nSimulator state: this crystal is engine-grown — ${ageYears} years of cell-time accumulation since nucleation, integrated mass ${engineState.mass_mg.toFixed(2)} mg. Sphalerite is durable (no seasonal redissolution like goslarite); the engine treats net mass as fully retained. Engine path: methanogenic biogenic H₂S × galvanized Zn²⁺ — the chemistry-flip of the same Zn source that grows goslarite under acid-oxidizing conditions in shallower zones.`;
+    }
+    return base;
 }
 function _narrateAnglesite(scenario, _zoneId, available) {
     const cell = _scenarioCellName(scenario);
@@ -1240,7 +1266,7 @@ function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, pr
             paragenesis = _narratePyromorphite(scenario, zoneId, available);
             break;
         case "sphalerite":
-            paragenesis = _narrateSphalerite(scenario, zoneId, available);
+            paragenesis = _narrateSphalerite(scenario, zoneId, available, (engineDotState && engineDotState.source === "engine") ? engineDotState : null);
             break;
         case "anglesite":
             paragenesis = _narrateAnglesite(scenario, zoneId, available);
@@ -1739,9 +1765,14 @@ function runCellEngine(state, totalSteps) {
         const goslariteCrystals = growGoslarite(state);
         state.crystals.push(...goslariteCrystals);
     }
+    // Sphalerite engine — js/12-engine-sphalerite.ts (v12).
+    if (typeof growSphalerite === "function") {
+        const sphaleriteCrystals = growSphalerite(state);
+        state.crystals.push(...sphaleriteCrystals);
+    }
     // Future per-mineral engines wire in here:
-    // if (typeof growSphalerite === "function") state.crystals.push(...growSphalerite(state));
     // if (typeof growPyromorphite === "function") state.crystals.push(...growPyromorphite(state));
+    // if (typeof growAnglesite === "function") state.crystals.push(...growAnglesite(state));
     return state;
 }
 // Convenience: run the engine for a scenario at its declared waste_age
@@ -1966,6 +1997,226 @@ function growGoslarite(state) {
             const jitterY = (rng() - 0.5) * (item.h_m ?? 0.5) * 0.7;
             out.push({
                 mineral_id: "goslarite",
+                host_item_id: item.id,
+                host_item_class: item.class_id,
+                zone_id: zoneMatch.id,
+                x_m: (item.x_m ?? 0) + jitterX,
+                y_m: (item.y_m ?? 0) + jitterY,
+                age_steps: ageSteps,
+                born_step: bornStep,
+                crystal_mass_mg: massPerCrystal,
+                source: "engine",
+            });
+        }
+    }
+    return out;
+}
+
+// ── 12-engine-sphalerite.js ──
+
+// ============================================================
+// js/12-engine-sphalerite.ts — sphalerite growth engine
+// ============================================================
+//
+// Second per-mineral chemistry engine, following the per-mineral pattern
+// established by js/11-engine-goslarite.ts. Per the "one mineral at a
+// time" rule (boss instruction 2026-05-08): solo minerals ship + test
+// independently; only paragenesis-linked minerals ship together. Sphalerite
+// is solo — the methanogenic-reducing Zn fate. Tests the engine's
+// reducing-chemistry path (opposite gate from goslarite's acid-oxidizing
+// case) on the same galvanized substrate, demonstrating chemistry-flip:
+// same Zn source, different mineral, depending on zone phase + redox.
+//
+// Sphalerite (ZnS) per minerals.json:
+//   substrate_grows_on: galvanized_steel, zinc_metal, e_waste_zn,
+//                       tire_pile_burn_residue
+//   chemistry_phase:    methanogenic
+//   decay_precursor:    drywall_sulfate_to_biogenic_h2s,
+//                       tire_pyrolysis_zns_char
+//   pH_optimum:         [6, 9]
+//   redox_requirement:  reducing
+//   required_ingredients: {Zn: 1, S2: 0.5}
+//   nucleation_sigma:   1.0
+//   growth_rate_mult:   0.5
+//
+// Engine logic:
+// 1. Substrate gate: item.substrate_tokens contains ANY of the
+//    sphalerite-substrate set. v12 also recognizes Fe-Zn alloy via the
+//    galvanized_steel token (Garcia Lopez characterized the MSG fines as
+//    "Fe-Zn alloy fragments coated with sphalerite" — same substrate
+//    vocabulary as goslarite's acid-phase precursor).
+// 2. Zone gate: item sits in methanogenic_core OR lcs_biofilm
+//    (both reducing + methanogenic). Sphalerite does NOT nucleate in
+//    cap_contact / acidogenic_horizon (oxidizing) — that's where
+//    goslarite goes instead. The chemistry-flip is mechanical, not
+//    decorative.
+// 3. Sulfide-supply gate: cell must have a biogenic-H2S source.
+//    Sphalerite chemistry runs on H2S generated by sulfate-reducing
+//    bacteria from drywall sulfate or residual battery sulfate. Without
+//    drywall_gypsum or lead_acid_battery in the substrate inventory,
+//    no H2S, no sphalerite. (Tire-pyrolysis ZnS-char is a separate path
+//    handled at burn-zone-affected tiles only — see the burn-event
+//    branch below.)
+// 4. Mass model: sphalerite is durable (no seasonal redissolution like
+//    goslarite). net_mass_coefficient = 1.0 — all grown mass persists.
+//    Growth rate is slower (0.5× goslarite baseline). Reference mass at
+//    120 ticks (10 yrs) under ideal conditions = 0.4 mg per crystal.
+// 5. Burn-event branch: when an item sits inside a burn-event halo or
+//    frozen-metastable ring AND has tire_pile_burn_residue substrate,
+//    sphalerite can ALSO grow via the ZnS-rich tire-pyrolysis char path
+//    (per HANDOFF-BURN-ZONE.md catalog activation table + Polymers 2023
+//    review). v12 implements this explicitly so Bridgeton's tire items
+//    in the burn footprint demonstrate the burn-zone Zn fate alongside
+//    the steady-state methanogenic path.
+// Substrate gates split per-branch:
+// Branch 1 (steady-state methanogenic) requires Zn-bearing substrate
+// (galvanized_steel / zinc_metal / e_waste_zn). Branch 2 (burn-event
+// tire-pyrolysis) requires rubber (tires inside a burn ring become
+// effective tire_pile_burn_residue). Items can pass either gate; the
+// branches are tried in order and the first match wins.
+const SPHALERITE_METHANOGENIC_SUBSTRATES = ["galvanized_steel", "zinc_metal", "e_waste_zn", "tire_pile_burn_residue"];
+const SPHALERITE_BURN_SUBSTRATES = ["rubber", "tire_pile_burn_residue"];
+const SPHALERITE_H2S_SOURCE_TOKENS = ["drywall_gypsum", "lead_acid_battery"];
+// Methanogenic + reducing zones where sphalerite nucleates from biogenic
+// H2S. lcs_biofilm is "biofilm" phase but runs reducing-leaning chemistry
+// at the LCS pipework, so v12 includes it for completeness.
+const SPHALERITE_FRIENDLY_ZONES = {
+    methanogenic_core: true,
+    lcs_biofilm: true,
+    stable_basal: true, // late paragenesis still hosts sphalerite if S2 hasn't been fully consumed
+};
+const SPHALERITE_CRYSTALS_PER_ITEM = 3;
+const SPHALERITE_NUCLEATION_LAG_FRAC = 0.10; // sphalerite needs SRBs to mature; lag longer than goslarite's 5%
+const SPHALERITE_NET_MASS_COEFF = 1.0; // durable phase, no redissolution
+const SPHALERITE_REFERENCE_MASS_MG_AT_120_TICKS = 0.4;
+// Crystal-cluster spread per host item: sphalerite tetrahedra cluster
+// tighter than goslarite efflorescence — smaller jitter so the cluster
+// reads as a coating rather than a spray.
+const SPHALERITE_JITTER_FRAC = 0.5;
+function _scenarioHasH2SSource(scenario) {
+    const inv = scenario && scenario.substrate_inventory;
+    if (!Array.isArray(inv))
+        return false;
+    for (const entry of inv) {
+        if (SPHALERITE_H2S_SOURCE_TOKENS.indexOf(entry.token) >= 0)
+            return true;
+    }
+    return false;
+}
+// Sphalerite supersaturation factor by zone. Methanogenic core is the
+// "default" for sulfide chemistry — biogenic H2S accumulates there
+// over decades (the cell's bulk reducing chemistry runs there). LCS
+// biofilm hosts a parallel chemistry but at lower H2S levels (the
+// biofilm consumes the upward-diffusing methane, not the sulfide).
+// Stable basal is methanogenic-core's late echo: sulfide chemistry
+// has mostly been swept into the cell's sulfide trap above, so
+// stable_basal sphalerite is sparse but documented.
+function _localSphaleriteSupersaturation(zoneId) {
+    if (zoneId === "methanogenic_core")
+        return 3.0; // peak sulfide chemistry
+    if (zoneId === "lcs_biofilm")
+        return 1.2; // diffuse biogenic H2S
+    if (zoneId === "stable_basal")
+        return 1.5; // late sulfide echo
+    return 1.0;
+}
+// Burn-event sphalerite path: items with tire_pile_burn_residue that
+// fall inside a burn event's halo or frozen-metastable ring grow
+// sphalerite via the tire-pyrolysis ZnS-char route. Returns the supersat
+// boost for that branch (independent of biogenic H2S availability —
+// the char IS the sulfide source).
+function _itemInBurnRing(item, scenario, geom) {
+    const events = Array.isArray(scenario && scenario.events) ? scenario.events : [];
+    for (const ev of events) {
+        if (typeof _itemInEventRing !== "function")
+            continue;
+        if (_itemInEventRing(item, ev, "halo", geom))
+            return { event: ev, state: "halo" };
+        if (_itemInEventRing(item, ev, "frozen_metastable", geom))
+            return { event: ev, state: "frozen_metastable" };
+        if (_itemInEventRing(item, ev, "burning", geom))
+            return { event: ev, state: "burning" };
+    }
+    return null;
+}
+function growSphalerite(state) {
+    const out = [];
+    if (!state || !state.scenario || !state.items || state.items.length === 0)
+        return out;
+    const mineral = (state.mineralSpec ?? {})["sphalerite"];
+    if (!mineral)
+        return out;
+    const hasH2SSource = _scenarioHasH2SSource(state.scenario);
+    const cellAgeSteps = state.cellAgeSteps;
+    const bornStep = Math.floor(cellAgeSteps * SPHALERITE_NUCLEATION_LAG_FRAC);
+    const ageSteps = Math.max(0, cellAgeSteps - bornStep);
+    const growthRate = (typeof mineral.growth_rate_mult === "number") ? mineral.growth_rate_mult : 0.5;
+    for (const item of state.items) {
+        const tokens = item.substrate_tokens ?? [];
+        let zoneMatch = null;
+        let supersat = 0;
+        let sourceLabel = ""; // tracks which path produced this crystal
+        // Branch 1: steady-state methanogenic path. Requires Zn-bearing
+        // substrate AND H2S source AND zone match.
+        let hasMethanogenicSubstrate = false;
+        for (const tok of tokens) {
+            if (SPHALERITE_METHANOGENIC_SUBSTRATES.indexOf(tok) >= 0) {
+                hasMethanogenicSubstrate = true;
+                break;
+            }
+        }
+        if (hasMethanogenicSubstrate && hasH2SSource) {
+            const zm = (typeof _findItemZone === "function") ? _findItemZone(item, state.zoneSpec, state.geom) : null;
+            if (zm && SPHALERITE_FRIENDLY_ZONES[zm.id]) {
+                zoneMatch = zm;
+                supersat = _localSphaleriteSupersaturation(zm.id);
+                sourceLabel = "methanogenic_h2s";
+            }
+        }
+        // Branch 2: burn-event tire-pyrolysis ZnS-char path. Independent of
+        // H2S source — the char itself is the sulfide. Items with rubber
+        // substrate (tires) sitting inside a burn ring trigger this path
+        // even if they're outside SPHALERITE_FRIENDLY_ZONES — the char
+        // overrides zone-typical chemistry locally. Substrate-token note:
+        // tires carry the "rubber" token, not "tire_pile_burn_residue";
+        // the latter is the AFTER-FIRE transformation. The engine treats
+        // a tire inside a burn ring as implicitly transformed (the fire
+        // pyrolyzed it). When v13+ adds explicit substrate-state
+        // transformation, this branch will read the augmented token list
+        // instead of inferring the transform here.
+        if (!zoneMatch) {
+            let hasBurnSubstrate = false;
+            for (const tok of tokens) {
+                if (SPHALERITE_BURN_SUBSTRATES.indexOf(tok) >= 0) {
+                    hasBurnSubstrate = true;
+                    break;
+                }
+            }
+            if (hasBurnSubstrate) {
+                const burnHit = _itemInBurnRing(item, state.scenario, state.geom);
+                if (burnHit) {
+                    // Synthetic zone id encodes the burn provenance for the renderer
+                    // and narrator. Same convention 03-crystal-positions.ts uses for
+                    // event-bound dots.
+                    zoneMatch = { id: `event:${burnHit.event.id}:${burnHit.state}`, zone: { id: "burn_event_synthetic", typical_phase: "burn_zone" } };
+                    supersat = burnHit.state === "burning" ? 4.0 : 2.0; // tire char is concentrated; halo dilutes
+                    sourceLabel = `tire_pyrolysis_${burnHit.state}`;
+                }
+            }
+        }
+        if (!zoneMatch || supersat < 1.0)
+            continue;
+        const baseMass = (ageSteps / 120) * SPHALERITE_REFERENCE_MASS_MG_AT_120_TICKS;
+        const supersatBoost = Math.min(supersat, 5) / 3;
+        const massPerCrystal = baseMass * growthRate * supersatBoost * SPHALERITE_NET_MASS_COEFF;
+        if (massPerCrystal <= 0)
+            continue;
+        const rng = _mulberry32Engine(_hashStrEngine(`engine|sphalerite|${item.id}|${sourceLabel}|${state.sessionSeed}`));
+        for (let i = 0; i < SPHALERITE_CRYSTALS_PER_ITEM; i++) {
+            const jitterX = (rng() - 0.5) * (item.w_m ?? 0.5) * SPHALERITE_JITTER_FRAC;
+            const jitterY = (rng() - 0.5) * (item.h_m ?? 0.5) * SPHALERITE_JITTER_FRAC;
+            out.push({
+                mineral_id: "sphalerite",
                 host_item_id: item.id,
                 host_item_class: item.class_id,
                 zone_id: zoneMatch.id,
@@ -2431,7 +2682,69 @@ function growGoslarite(state) {
 //        engine dot's mass (visible in the DOM data-crystal-mass-mg
 //        attr) varies with cell age × seasonal phase, deterministic
 //        per (scenario, sessionSeed).
-const WASTELAND_VERSION = "v11";
+//   v12 — sphalerite engine: chemistry-flip of goslarite (2026-05-08):
+//        per the boss's "one mineral at a time" rule (clarified
+//        2026-05-08): solo minerals ship + test independently; only
+//        paragenesis-linked minerals (the Pb suite — anglesite +
+//        pyromorphite + galena, when those land) ship together.
+//        Sphalerite is the natural next solo: same Zn source as
+//        goslarite (galvanized_steel substrate) but with completely
+//        opposite chemistry gates — methanogenic-reducing vs
+//        acid-oxidizing. Demonstrates the engine handles the chemistry-
+//        flip principle without code knowing about the principle.
+//        - js/12-engine-sphalerite.ts — growSphalerite(state) returns
+//          EngineCrystal[] for items with sphalerite-substrate tokens
+//          sitting in methanogenic zones with biogenic H2S available.
+//          Two branches:
+//          (1) Steady-state methanogenic path: substrate gate
+//              (galvanized_steel | zinc_metal | e_waste_zn |
+//              tire_pile_burn_residue) + zone gate (methanogenic_core |
+//              lcs_biofilm | stable_basal) + H2S source gate (drywall
+//              gypsum or lead_acid_battery in scenario substrate
+//              inventory). Local supersaturation: methanogenic_core
+//              3×, lcs_biofilm 1.2×, stable_basal 1.5×.
+//          (2) Burn-event tire-pyrolysis ZnS-char path: items with
+//              tire_pile_burn_residue substrate inside a burn event's
+//              halo / frozen-metastable / burning ring grow sphalerite
+//              via the char (per HANDOFF-BURN-ZONE.md catalog
+//              activation table + Polymers 2023 review). The char
+//              IS the sulfide source — bypasses the SRB chemistry.
+//              Synthetic zone_id "event:<event_id>:<state>" emitted
+//              so renderer + narrator can route correctly.
+//        - Mass model: net_mass_coefficient = 1.0 (sphalerite is
+//          durable, no seasonal redissolution like goslarite).
+//          Reference mass at 120 ticks = 0.4 mg per crystal. Growth
+//          rate 0.5× from minerals.json. Three crystals per
+//          (item, zone) match, jittered tighter than goslarite (50%
+//          of item footprint vs 70%) so the cluster reads as a
+//          coating rather than a spray — sphalerite tetrahedra
+//          aggregate locally rather than fanning out.
+//        - js/03-crystal-positions.ts: sphalerite registered in
+//          ENGINE_CONTROLLED_MINERALS so the seeded sampler skips it.
+//          Engine output flows through the same merge path as
+//          goslarite.
+//        - js/04-narrators.ts: _narrateSphalerite gains optional
+//          engineState param + branches on synthetic event-zone IDs.
+//          Tire-pyrolysis branch: opens with the fire as actor (per
+//          HANDOFF-BURN-ZONE.md narrator pattern), names the char as
+//          mechanism, closes by composing with the steady-state
+//          methanogenic-core narrative ("same crystal, different
+//          precursor route"). Steady-state branch: closer reframes
+//          chemistry as "the chemistry-flip of the same Zn source
+//          that grows goslarite under acid-oxidizing conditions in
+//          shallower zones."
+//        Visual diff vs v11: the same scenarios now render
+//        engine-grown sphalerite (amber-brown halo on galvanized
+//        appliances at depth) in methanogenic_core / lcs_biofilm /
+//        stable_basal zones. Bridgeton additionally renders sphalerite
+//        on tire items inside the SSR's burn footprint (the
+//        tire-pyrolysis ZnS-char branch). Goslarite continues at
+//        cap_contact + acidogenic_horizon — the same Zn source, the
+//        same items, but at different depths the engine renders
+//        different minerals because the chemistry-flip is a
+//        zone-phase function. Engine dot counts grow by ~3× per
+//        scenario.
+const WASTELAND_VERSION = "v12";
 
 // ── 99-renderer-cross-section.js ──
 

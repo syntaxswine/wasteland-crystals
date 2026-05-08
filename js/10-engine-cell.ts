@@ -147,9 +147,14 @@ function runCellEngine(state: CellState, totalSteps: number): CellState {
     const goslariteCrystals = growGoslarite(state);
     state.crystals.push(...goslariteCrystals);
   }
+  // Sphalerite engine — js/12-engine-sphalerite.ts (v12).
+  if (typeof growSphalerite === "function") {
+    const sphaleriteCrystals = growSphalerite(state);
+    state.crystals.push(...sphaleriteCrystals);
+  }
   // Future per-mineral engines wire in here:
-  // if (typeof growSphalerite === "function") state.crystals.push(...growSphalerite(state));
   // if (typeof growPyromorphite === "function") state.crystals.push(...growPyromorphite(state));
+  // if (typeof growAnglesite === "function") state.crystals.push(...growAnglesite(state));
   return state;
 }
 

@@ -453,4 +453,67 @@
 //        attr) varies with cell age × seasonal phase, deterministic
 //        per (scenario, sessionSeed).
 
-const WASTELAND_VERSION = "v11";
+//   v12 — sphalerite engine: chemistry-flip of goslarite (2026-05-08):
+//        per the boss's "one mineral at a time" rule (clarified
+//        2026-05-08): solo minerals ship + test independently; only
+//        paragenesis-linked minerals (the Pb suite — anglesite +
+//        pyromorphite + galena, when those land) ship together.
+//        Sphalerite is the natural next solo: same Zn source as
+//        goslarite (galvanized_steel substrate) but with completely
+//        opposite chemistry gates — methanogenic-reducing vs
+//        acid-oxidizing. Demonstrates the engine handles the chemistry-
+//        flip principle without code knowing about the principle.
+//        - js/12-engine-sphalerite.ts — growSphalerite(state) returns
+//          EngineCrystal[] for items with sphalerite-substrate tokens
+//          sitting in methanogenic zones with biogenic H2S available.
+//          Two branches:
+//          (1) Steady-state methanogenic path: substrate gate
+//              (galvanized_steel | zinc_metal | e_waste_zn |
+//              tire_pile_burn_residue) + zone gate (methanogenic_core |
+//              lcs_biofilm | stable_basal) + H2S source gate (drywall
+//              gypsum or lead_acid_battery in scenario substrate
+//              inventory). Local supersaturation: methanogenic_core
+//              3×, lcs_biofilm 1.2×, stable_basal 1.5×.
+//          (2) Burn-event tire-pyrolysis ZnS-char path: items with
+//              tire_pile_burn_residue substrate inside a burn event's
+//              halo / frozen-metastable / burning ring grow sphalerite
+//              via the char (per HANDOFF-BURN-ZONE.md catalog
+//              activation table + Polymers 2023 review). The char
+//              IS the sulfide source — bypasses the SRB chemistry.
+//              Synthetic zone_id "event:<event_id>:<state>" emitted
+//              so renderer + narrator can route correctly.
+//        - Mass model: net_mass_coefficient = 1.0 (sphalerite is
+//          durable, no seasonal redissolution like goslarite).
+//          Reference mass at 120 ticks = 0.4 mg per crystal. Growth
+//          rate 0.5× from minerals.json. Three crystals per
+//          (item, zone) match, jittered tighter than goslarite (50%
+//          of item footprint vs 70%) so the cluster reads as a
+//          coating rather than a spray — sphalerite tetrahedra
+//          aggregate locally rather than fanning out.
+//        - js/03-crystal-positions.ts: sphalerite registered in
+//          ENGINE_CONTROLLED_MINERALS so the seeded sampler skips it.
+//          Engine output flows through the same merge path as
+//          goslarite.
+//        - js/04-narrators.ts: _narrateSphalerite gains optional
+//          engineState param + branches on synthetic event-zone IDs.
+//          Tire-pyrolysis branch: opens with the fire as actor (per
+//          HANDOFF-BURN-ZONE.md narrator pattern), names the char as
+//          mechanism, closes by composing with the steady-state
+//          methanogenic-core narrative ("same crystal, different
+//          precursor route"). Steady-state branch: closer reframes
+//          chemistry as "the chemistry-flip of the same Zn source
+//          that grows goslarite under acid-oxidizing conditions in
+//          shallower zones."
+//        Visual diff vs v11: the same scenarios now render
+//        engine-grown sphalerite (amber-brown halo on galvanized
+//        appliances at depth) in methanogenic_core / lcs_biofilm /
+//        stable_basal zones. Bridgeton additionally renders sphalerite
+//        on tire items inside the SSR's burn footprint (the
+//        tire-pyrolysis ZnS-char branch). Goslarite continues at
+//        cap_contact + acidogenic_horizon — the same Zn source, the
+//        same items, but at different depths the engine renders
+//        different minerals because the chemistry-flip is a
+//        zone-phase function. Engine dot counts grow by ~3× per
+//        scenario.
+
+const WASTELAND_VERSION = "v12";

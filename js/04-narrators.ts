@@ -165,7 +165,12 @@ function _narratePyromorphite(scenario: any, zoneId: string, available: Availabl
   return `${acidClause.charAt(0).toUpperCase() + acidClause.slice(1)} into the acidogenic-phase pore water. The methanogenic core then ran for two decades — sulfate-reducers consumed residual SO₄, kept dissolved Pb mobile, and let it migrate downward through the cell's wall-drainage path. ${closing}`;
 }
 
-function _narrateSphalerite(scenario: any, _zoneId: string, available: AvailablePrecursor[]): string {
+function _narrateSphalerite(
+  scenario: any,
+  zoneId: string,
+  available: AvailablePrecursor[],
+  engineState?: { mass_mg?: number | null; age_steps?: number | null; born_step?: number | null } | null,
+): string {
   const cell = _scenarioCellName(scenario);
   const zincSource = _phrase("galvanized_zinc_dissolution", available) ?? "Zn²⁺ from corroding galvanized substrate";
   const sulfideSource = _phraseAny(
@@ -173,7 +178,33 @@ function _narrateSphalerite(scenario: any, _zoneId: string, available: Available
     available,
   ) ?? "biogenic H₂S from sulfate-reducer activity on residual SO4";
 
-  return `Galvanized steel — fence wire, ductwork, appliance shells — corroded under early acidic leachate, dropping ${zincSource} into solution. Drywall- and battery-derived sulfate, processed by anaerobic sulfate-reducers in the methanogenic phase, became ${sulfideSource}. Where dissolved Zn met dissolved sulfide the reaction was nearly diffusion-limited: ZnS precipitated as resinous-luster tetrahedra coating the surviving Fe-Zn alloy fragments. Garcia Lopez's SEM-EDS catalog from Mont-Saint-Guibert reports the same texture in its <4.5 mm fines, honey-amber to dark brown depending on residual iron content; ${cell} runs the same chemistry on the same substrate.`;
+  // Tire-pyrolysis branch: when zoneId is a synthetic event-zone,
+  // sphalerite came from the burn-event char path, not steady-state
+  // biogenic chemistry. Narrate accordingly so the prose tracks the
+  // mechanism. zoneId starts with "event:" only for the burn-event
+  // branch (per js/12-engine-sphalerite.ts).
+  if (typeof zoneId === "string" && zoneId.indexOf("event:") === 0) {
+    const tireChar = _phrase("tire_pyrolysis_zns_char", available) ?? "ZnS-rich tire-pyrolysis char";
+    const burnState = zoneId.split(":")[2] ?? "burn footprint";
+    const stateLabel = burnState === "burning" ? "the active fire core" :
+                       burnState === "halo" ? "the cooling halo's alteration ring" :
+                       burnState === "frozen_metastable" ? "the front's trailing edge where the chemistry is locked" : burnState;
+    const burnPart = `Where the burn front pyrolyzed buried tires at 400–700°C, the rubber matrix concentrated ZnS in the post-burn char (Polymers 2023 review): ${tireChar}. As the char migrated into ${stateLabel}, the sulfide reservoir didn't have to wait for sulfate-reducer chemistry to assemble — the tire fire had already done that work at temperature. ZnS recrystallized as resinous-luster tetrahedra directly on the carbonized rubber substrate. The same mineral the cell's methanogenic core grows by biogenic H₂S from drywall sulfate; here, by pyrolysis from the tire's own embedded sulfur and zinc oxide vulcanization additive.`;
+    if (engineState && typeof engineState.mass_mg === "number" && typeof engineState.age_steps === "number") {
+      const ageYears = (engineState.age_steps / 12).toFixed(1);
+      return `${burnPart}\n\nSimulator state: ${ageYears} years of cell-time accumulation since nucleation, integrated mass ${engineState.mass_mg.toFixed(2)} mg. Engine path: tire-pyrolysis ZnS-char (burn-overlay branch). Same crystal habit as the methanogenic-core sphalerite, different precursor route.`;
+    }
+    return burnPart;
+  }
+
+  // Steady-state methanogenic path.
+  const base = `Galvanized steel — fence wire, ductwork, appliance shells — corroded under early acidic leachate, dropping ${zincSource} into solution. Drywall- and battery-derived sulfate, processed by anaerobic sulfate-reducers in the methanogenic phase, became ${sulfideSource}. Where dissolved Zn met dissolved sulfide the reaction was nearly diffusion-limited: ZnS precipitated as resinous-luster tetrahedra coating the surviving Fe-Zn alloy fragments. Garcia Lopez's SEM-EDS catalog from Mont-Saint-Guibert reports the same texture in its <4.5 mm fines, honey-amber to dark brown depending on residual iron content; ${cell} runs the same chemistry on the same substrate.`;
+
+  if (engineState && typeof engineState.mass_mg === "number" && typeof engineState.age_steps === "number") {
+    const ageYears = (engineState.age_steps / 12).toFixed(1);
+    return `${base}\n\nSimulator state: this crystal is engine-grown — ${ageYears} years of cell-time accumulation since nucleation, integrated mass ${engineState.mass_mg.toFixed(2)} mg. Sphalerite is durable (no seasonal redissolution like goslarite); the engine treats net mass as fully retained. Engine path: methanogenic biogenic H₂S × galvanized Zn²⁺ — the chemistry-flip of the same Zn source that grows goslarite under acid-oxidizing conditions in shallower zones.`;
+  }
+  return base;
 }
 
 function _narrateAnglesite(scenario: any, _zoneId: string, available: AvailablePrecursor[]): string {
@@ -449,7 +480,7 @@ function narrateCrystal(
 
   switch (mineralId) {
     case "pyromorphite":   paragenesis = _narratePyromorphite(scenario, zoneId, available); break;
-    case "sphalerite":     paragenesis = _narrateSphalerite(scenario, zoneId, available);   break;
+    case "sphalerite":     paragenesis = _narrateSphalerite(scenario, zoneId, available, (engineDotState && engineDotState.source === "engine") ? engineDotState : null);   break;
     case "anglesite":      paragenesis = _narrateAnglesite(scenario, zoneId, available);    break;
     case "calcite":        paragenesis = _narrateCalcite(scenario, zoneId, available);      break;
     case "vivianite":      paragenesis = _narrateVivianite(scenario, zoneId, available);    break;

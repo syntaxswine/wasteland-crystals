@@ -46,11 +46,13 @@ interface CrystalDot {
 
 // Minerals whose dots come from the chemistry engine (js/10-engine-cell.ts +
 // per-mineral js/11..14-engine-*.ts) rather than the seeded sampler.
-// v11: goslarite only. As more per-mineral engines land in v12+, add
-// their ids here; the sampler will skip them and the engine output
-// will be merged into the dot list at the end of generateCrystalDots.
+// One mineral per per-mineral engine, per the proposal's "one mineral
+// at a time" rule (boss instruction 2026-05-08): solo minerals ship
+// + test independently; only paragenesis-linked minerals (Pb suite —
+// anglesite + pyromorphite + galena — when those land) ship together.
 const ENGINE_CONTROLLED_MINERALS: { [id: string]: true } = {
-  goslarite: true,
+  goslarite: true,    // v11 — acid-oxidizing Zn fate
+  sphalerite: true,   // v12 — methanogenic-reducing Zn fate (chemistry-flip of goslarite)
 };
 
 // Per-mineral display color. Tokens come from minerals.json color_visual but
