@@ -358,6 +358,32 @@ async function main() {
       report.scenarios[sc.label].burnNarrators = await exerciseBurnNarrators(page, OUT_DIR);
     }
 
+    // v11: any scenario with engine-grown dots → click one, screenshot
+    // the panel. Engine minerals are recognized via data-source="engine".
+    const hasEngineDot = await page.evaluate(() =>
+      !!document.querySelector("circle.dot[data-source='engine']"));
+    if (hasEngineDot && !SKIP_SHOTS) {
+      const engineInfo = await page.evaluate(() => {
+        const dot = document.querySelector("circle.dot[data-source='engine']");
+        if (!dot) return null;
+        dot.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        const panel = document.getElementById("examine-panel");
+        return {
+          mineral: dot.getAttribute("data-mineral-id"),
+          mass_mg: parseFloat(dot.getAttribute("data-crystal-mass-mg") ?? "0"),
+          age_steps: parseInt(dot.getAttribute("data-age-steps") ?? "0", 10),
+          paragenesisHasSimulatorState: !!panel?.querySelector(".paragenesis")?.textContent.includes("Simulator state:"),
+        };
+      });
+      await new Promise((r) => setTimeout(r, 100));
+      const shot = join(OUT_DIR, `engine-narrator-${sc.label}.png`);
+      await page.screenshot({ path: shot, type: "png", fullPage: true });
+      report.scenarios[sc.label].engineNarrator = {
+        ...engineInfo,
+        shot: `tools/test-output/engine-narrator-${sc.label}.png`,
+      };
+    }
+
     // Return to title before next iteration (skip on the last one).
     if (sc !== SCENARIOS[SCENARIOS.length - 1]) {
       await returnToTitle(page);
@@ -372,12 +398,13 @@ async function main() {
   console.log("");
   console.log("## visual-test summary");
   console.log("");
-  console.log("| scenario | dots | rings (B/H/F) | items | svg |");
+  console.log("| scenario | dots (sampler/engine) | rings (B/H/F) | items | svg |");
   console.log("|---|---|---|---|---|");
   for (const [label, s] of Object.entries(report.scenarios)) {
     const d = s.diagnostics;
     const rings = `${d.eventRings.burning}/${d.eventRings.halo}/${d.eventRings.frozen}`;
-    console.log(`| ${label} | ${d.dotCount} | ${rings} | ${d.itemCount} | ${d.svgPresent ? "✓" : "✗"} |`);
+    const engine = s.engineNarrator ? ` (${s.engineNarrator.mineral} ${s.engineNarrator.mass_mg.toFixed(2)}mg @ ${s.engineNarrator.age_steps}t)` : "";
+    console.log(`| ${label} | ${d.dotCount}${engine} | ${rings} | ${d.itemCount} | ${d.svgPresent ? "✓" : "✗"} |`);
   }
   if (report.scenarios.bridgeton?.burnNarrators) {
     console.log("");
