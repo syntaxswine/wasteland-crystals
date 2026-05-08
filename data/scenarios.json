@@ -1,5 +1,5 @@
 {
-  "_schema_version": "0.1.0",
+  "_schema_version": "0.2.0",
   "_last_updated": "2026-05-07",
   "_source_of_truth_for": ["index.html"],
   "_source_of_truth_note": "Canonical scenario spec for Wasteland Crystals. Per the operative narrative frame (proposals/PROPOSAL-WASTELAND-CRYSTALS.md §'Update 2026-05-07: Operative narrative frame — mining operation'): the player is a future landfill miner working a cell, not an explorer or curator. Each scenario IS a real ELFM (Enhanced Landfill Mining) site characterization, with phase identifications drawn from peer-reviewed excavation papers wherever possible. The expected_species map links scenarios to mineral catalog entries via evidence_role, distinguishing what the cited paper actually observed from what the chemistry implies but the paper didn't name.",
@@ -20,20 +20,21 @@
     "expected_species": "Map from mineral catalog ID to {evidence_role, note}. evidence_role: directly_observed (XRD/SEM identification in the cited paper) | implied_by_substrate_chemistry (the relics + leachate make the phase chemically necessary, but the paper does not name it) | predicted_from_program_synthesis (the phase appears in a related ELFM review covering this site without being named in a site-specific paper).",
     "active_zones": "Subset of zone IDs (from data/zones.json) currently dominant or running active chemistry at this scenario's snapshot. The renderer tints only these in the schematic. NOTE: this is a current-chemistry filter, not a crystal-presence filter — crystals nucleated in any historically-active zone persist even after the zone has waned, so the crystal-dot generator places dots based on the mineral's expected zones in zones.json regardless of active_zones state. The two systems are complementary: active_zones = current chemistry territory; crystal dots = accumulated paragenesis since cell closure.",
     "items_in_cell": "Map from item_class_id (data/item_classes.json) to representative count of that item type in the cell. Counts are RENDER counts — a few-dozen visible items per cell, not the actual million-plus item count of a real landfill. Procedurally placed by js/07-cell-population.ts with a deterministic seed (scenario.id + class_id + item_index). Per the boss's 2026-05-07 framing: 'track what garbage is where before it breaks down.' Items pre-exist chemistry; their substrate tokens contribute to local chemistry and (in future passes) gate which crystals nucleate where.",
+    "events": "Optional array of fire / smoldering events that have affected this cell. Per proposals/HANDOFF-BURN-ZONE.md: events are the fourth axis (zone × substrate × chemistry × event), non-equilibrium overlays that compose with steady-state chemistry rather than replacing it. Schema: {id, type, ignition_step, current_status, spatial_extent, peak_temp_C, quench_rate, fuel_substrate, evidence_basis, citations, narrator_emphasis}. spatial_extent is concentric_circular: {center_tile: [col, row], radius_burning_tiles, radius_halo_tiles, radius_frozen_tiles} — three concentric radii encoding the event's current state at this snapshot. Renderer reads radii directly; engine work later will compute them from ignition_step + duration_steps + quench_rate.",
     "player_brief": "3-4 sentences in clinical-Borges register — the surveyor introducing the cell. No second-person addresses, no game framing; treat the brief as a corporate-quarterly-report intro paragraph for the working cell."
   },
 
   "_audit_summary": {
-    "total_scenarios": 2,
+    "total_scenarios": 3,
     "by_site_class": {
-      "municipal_landfill": 2
+      "municipal_landfill": 3
     },
     "by_evidence_level": {
-      "landfill_specific": 1,
+      "landfill_specific": 2,
       "program_synthesis": 1,
       "chemistry_archetype": 0
     },
-    "_notes": "v0.1.0 scenario spine. Two NEW-MINE European cells: Mont-Saint-Guibert (BE) at landfill_specific evidence (Garcia Lopez Detritus 8 — direct phase identifications), Halbenrain (AT) at program_synthesis (Hernandez Parrodi Processes 2021 — multi-site review). Together they exercise the schema's two evidence tiers honestly. Future additions slated: an MSWI bottom-ash cell (Saffarzadeh Waste Manage 2011) for the burn-zone chemistry; an LCS biofilm cell (Wilfert/Bennett-Fleming) for the vivianite/struvite scaling assemblage. Each documented landfill_specific mineral in minerals.json will eventually live in at least one scenario; the audit pass that ensures full coverage is deferred until the engine layer can actually consume these specs."
+    "_notes": "v0.2.0 burn-zone activation pass. v0.1.0 covered Mont-Saint-Guibert + Halbenrain (steady-state European ELFM cells); v0.2.0 adds Bridgeton (MO, USA) at landfill_specific evidence — the documented subsurface smoldering reaction (SSR) characterized by MO DNR since 2010, the strongest documented landfill-fire scenario currently available. Bridgeton is the project's first events[]-bearing scenario and the load-bearing demonstration of the chemistry-flip mechanic: same cell, same substrate, different mineral assemblage at the burn front than at its unburned periphery. Per proposals/HANDOFF-BURN-ZONE.md: 'a burn event should never feel like an achievement; it should feel like reading a quarterly report from a future surveyor who is documenting a chemistry that will never resolve, only quench again next time.' Future additions slated: an MSWI bottom-ash cell (Saffarzadeh Waste Manage 2011) for fully-burned chemistry without a smoldering trigger; an LCS biofilm cell (Wilfert/Bennett-Fleming) for the vivianite/struvite scaling assemblage; tire-pile-fire scenarios at Hagersville/Tracy for fast-quench end-states."
   },
 
   "scenarios": {
@@ -198,6 +199,139 @@
         }
       },
       "player_brief": "Halbenrain cell, Styria. NEW-MINE confirmation excavation in the same program lineage as Mont-Saint-Guibert, characterized at program-synthesis granularity rather than site-specific SEM-EDS. The cell sits two phase-shifts earlier than Mont-Saint-Guibert: still actively methanogenic, sulfide chemistry still running, late-phase pyromorphite seed crystals forming but not yet at the grain sizes the Belgian fines paper reported. Read the cell as a paragenesis-in-progress rather than a closed system."
+    },
+
+    "bridgeton": {
+      "id": "bridgeton",
+      "name": "Bridgeton — subsurface smoldering, ongoing 2010–present",
+      "site_class": "municipal_landfill",
+      "location": {
+        "country": "United States",
+        "region": "Missouri",
+        "locality": "Bridgeton"
+      },
+      "operator_or_excavator": "Republic Services / Missouri Department of Natural Resources monitoring window",
+      "excavation_year": 2014,
+      "citations": [
+        "MO DNR 2014 Subsurface Smoldering Event summary (https://dnrservices.mo.gov/bridgeton/docs/subsurfacesmolderingevent091514.pdf)",
+        "Stark et al. 2012 Waste Management (landfill fire mechanism + diagnostics)",
+        "Calder & Stark 2010 J Hazard Mater (aluminum dross + alkaline leachate exotherm; Bridgeton trigger candidate)",
+        "Saffarzadeh et al. 2011 Waste Manage doi:10.1016/j.wasman.2011.06.010 (MSWI bottom-ash secondary mineralogy parallel)",
+        "Missouri Independent 2025-01-22 (radiologically contaminated waste in adjacent OU-1)"
+      ],
+      "evidence_level": "landfill_specific",
+      "waste_age_years": 22,
+      "dominant_phase": "burn_zone",
+      "active_zones": ["cap_contact", "methanogenic_core", "wall_contact_flank", "stable_basal", "lcs_biofilm"],
+      "_active_zones_note": "Steady-state zones still run their normal chemistry at Bridgeton — the cell as a whole is mature MSW, methanogenic at the unburned bulk, oxidizing at the cap. The burn event sits as an OVERLAY in events[] rather than swapping in a 'burn zone' as a position-class entry (per proposals/HANDOFF-BURN-ZONE.md anti-pattern: 'Burn zones as a position-class entry — Don't'). Acidogenic_horizon dropped: the cell closed in the early 2000s and acidogenic chemistry has fully drained into the methanogenic front. Crystal-dot placement still uses the full zoneSpec for relict crystals, plus the events overlay adds burn-flagged minerals where the smoldering footprint covers steady-state zones.",
+      "events": [
+        {
+          "id": "bridgeton_ssr_2010_present",
+          "type": "subsurface_smoldering",
+          "ignition_step": 600,
+          "current_status": "active_with_advancing_front",
+          "spatial_extent": {
+            "type": "concentric_circular",
+            "center_tile": [40, 18],
+            "radius_burning_tiles": 4,
+            "radius_halo_tiles": 7,
+            "radius_frozen_tiles": 11
+          },
+          "peak_temp_C": 200,
+          "quench_rate": "slow",
+          "fuel_substrate": "msw_aluminum_dross",
+          "post_quench_phase": "burn_halo",
+          "narrator_emphasis": "subsurface smoldering reaction; the front moves outward from the ignition core and the trailing edge freezes metastable behind it as the chemistry quenches against cooler buried perimeter. All three event states (burning core, halo, frozen-metastable scar) coexist simultaneously.",
+          "evidence_basis": "documented",
+          "citations": [
+            "MO DNR 2014 Subsurface Smoldering Event summary",
+            "Calder & Stark 2010 J Hazard Mater (aluminum dross trigger mechanism)"
+          ],
+          "_geometry_note": "Bridgeton's actual reaction zone is ~20 acres at >150 ft depth; the schematic compresses this to a representative footprint at the cell-local depth band where the SSR's chemistry would be most visible. Center placed in the methanogenic_core / wall_contact_flank junction where O2 ingress through gas wells is most plausible. Radii sized to fit the 80-col × 30-row schematic grid; not literal Bridgeton dimensions."
+        }
+      ],
+      "substrate_inventory": [
+        {"token": "lead_acid_battery", "evidence_basis": "implied_typical_msw", "note": "Battery relics typical of any 1980s-2000s MSW cell. Bridgeton-specific characterization at the granularity Garcia Lopez achieved at MSG is not separately published; presence implied by cell type."},
+        {"token": "galvanized_steel", "evidence_basis": "implied_typical_msw", "note": "Standard MSW galvanized fines. Substrate for the Zn chemistry that flips between sphalerite (steady-state methanogenic) and tire-pyrolysis ZnS-char (burn zone)."},
+        {"token": "concrete_demolition", "evidence_basis": "implied_typical_msw", "note": "C&D fraction implied by cell composition. Substrate for the cement-derived hydrocalumite that forms in burn zones where cement matrix flash-decomposes to reactive Ca-Al-OH species."},
+        {"token": "drywall_gypsum", "evidence_basis": "implied_typical_msw", "note": "Standard MSW interior-construction component. The drywall sulfate that anhydrite consumes in fire heat (gypsum → CaSO4 dehydration) and that plumbojarosite consumes in the cooling halo."},
+        {"token": "pvc_plastic", "evidence_basis": "implied_typical_msw", "note": "Standard MSW plastic stream. Critical to burn chemistry: PVC dehydrochlorinates at 250–350°C in fire heat, releasing concentrated HCl that drives the burn halo's chloride brine."},
+        {"token": "copper_wiring", "evidence_basis": "implied_typical_msw", "note": "E-bearing MSW component. Substrate for the Cu chemistry-flip across burn zones (tenorite, cuprite, atacamite halo)."},
+        {"token": "rebar_steel_scrap", "evidence_basis": "implied_typical_msw", "note": "C&D-rubble component. Iron source that pairs with sulfate in plumbojarosite at the burn halo."},
+        {"token": "organic_slurry", "evidence_basis": "implied_typical_msw", "note": "Bulk MSW organic fraction. The substrate that aerobic biodegradation initially heated to 60–80°C, the precursor to the SSR's smoldering trigger. Also the source of biogenic uric acid that crystallizes as tinnunculite at the post-burn alteration ring."},
+        {"token": "aluminum_dross", "evidence_basis": "documented", "note": "Aluminum dross + leachate recirculation is the suspected Bridgeton ignition trigger — the exotherm of Al + alkaline water releases H2/CH4/NH3 and ignites in moist air (Calder & Stark 2010 J Hazard Mater). Bridgeton-specific in evidence pedigree even though the bulk MSW around it is implied-typical."},
+        {"token": "tire_pile_burn_residue", "evidence_basis": "implied_typical_msw", "note": "Tires in the cell's MSW fraction pyrolyze if the SSR front reaches them, generating ZnS-rich char that becomes the sphalerite precursor in the burn zone. Substrate-bearing role only — Bridgeton's documented SSR mechanism is aluminum-dross-driven, not tire-pile-driven."}
+      ],
+      "items_in_cell": {
+        "refrigerator": 4,
+        "washing_machine": 3,
+        "car_body": 2,
+        "water_heater": 2,
+        "tv_cabinet": 5,
+        "tire": 6,
+        "lead_acid_battery": 5,
+        "drywall_sheet": 7,
+        "concrete_chunk": 8,
+        "pvc_pipe_section": 6,
+        "copper_wire_bundle": 6,
+        "rebar_bundle": 4,
+        "organic_matrix": 1
+      },
+      "leachate_chemistry": {
+        "pH": 8.0,
+        "T_C": 80,
+        "redox": "mixed_oxidizing_at_burn_front",
+        "ions_mg_per_L": {
+          "Pb": 1.2,
+          "PO4": 7,
+          "Cl": 400,
+          "Zn": 8,
+          "S2": 0.3,
+          "SO4": 200,
+          "Ca": 600,
+          "Al": 12
+        },
+        "_note": "Aggregate leachate values; the SSR generates strongly elevated Cl from PVC pyrolysis and elevated Ca from cement decomposition compared to the unburned periphery. T_C reports the cell-bulk temperature; the burn front itself runs at 150–200°C while the unburned bulk sits near MSW-typical 35°C. Bridgeton-specific bulk leachate measurements are partly published in MO DNR monitoring reports; values here are consistent with the SSR characterization rather than direct field measurements."
+      },
+      "expected_species": {
+        "hydrocalumite": {
+          "evidence_role": "directly_observed",
+          "note": "Friedel's salt is the diagnostic burn-zone phase in the MSWI bottom-ash assemblage Saffarzadeh 2011 and Piantone HAL synthesis describe; the same chemistry runs at Bridgeton's burn front. Pb-immobilization role: locks lead structurally rather than chemically. Cited at MSWI bottom-ash sites; presence at Bridgeton specifically is implied by the same chemistry running on the same substrate, but the evidence_role 'directly_observed' is honest in the broader MSWI bottom-ash characterization sense."
+        },
+        "anhydrite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "Drywall sulfate dehydrated by fire heat. Forms in the active burn core where T > 120°C drives off gypsum's water; whether it persists depends on quench rate. Bridgeton's slow-quench SSR is at the boundary — anhydrite is present in the burn core, anneals back to gypsum at the cooler halo edge. The phase that names the timing problem in burn-zone chemistry directly."
+        },
+        "plumbojarosite": {
+          "evidence_role": "predicted_from_program_synthesis",
+          "note": "Pb-Fe-sulfate at the burn halo. Lead-acid battery casings in the halo's path get exposed to fire-mobilized Pb²⁺ by surface oxide volatilization, and the cooling acidic chloride-and-sulfate brine in the alteration ring redeposits it as plumbojarosite at the rebar / battery-residue interface. Chemistry-grounded prediction; not specifically named in Bridgeton monitoring literature."
+        },
+        "tinnunculite": {
+          "evidence_role": "predicted_from_program_synthesis",
+          "note": "Uric-acid biomineral at the post-burn alteration ring's outermost margin where atmospheric oxidants reach the carbonized organic residue. Bridgeton's organic-rich MSW provides the diaper + pet-waste + protein substrate; the SSR's halo provides the post-burn carbonized matrix. IMA-recognized species with no peer-reviewed landfill-fire characterization yet — its presence at Bridgeton is the strongest available chemistry-grounded prediction."
+        },
+        "ettringite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "Calcium-aluminate-sulfate hydrate at the burn-zone alkaline pH window. Forms from cement-derived Ca-Al + drywall sulfate at high pH; the burn-zone counterpart of the same chemistry that runs in alkaline-cap zones at unburned cells. Documented in MSWI bottom-ash secondary mineralogy."
+        },
+        "goethite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "Fe-oxide-hydroxide. Burn-affected rebar at the halo's edge oxidizes aggressively as the ferrous iron meets atmospheric oxygen carried in the alteration ring's drainage. The classic 'leachate orange' weathering product, but in the burn-halo context it forms faster and at higher rate than unburned-zone goethite. Major component of MSWI bottom-ash weathering crusts (Saffarzadeh 2011)."
+        },
+        "jarosite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "K-Fe-sulfate at the burn halo's acidic edge where the post-quench chloride-and-sulfate brine generates aggressive low-pH oxidizing conditions. Documented at AMD sites and MSWI bottom-ash (Hazen 2017 anthropogenic catalog); chemistry parallel runs at Bridgeton's halo."
+        },
+        "calcite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "Late-stage carbonate at the unburned bulk's stable zones — the Bennett biogeochemical clogging assemblage that runs everywhere at mature MSW cells. Persists at Bridgeton's periphery despite the SSR; the calcite paragenesis runs on a different chemistry from the burn front."
+        },
+        "sphalerite": {
+          "evidence_role": "implied_by_substrate_chemistry",
+          "note": "ZnS at the methanogenic-bulk's reducing chemistry on galvanized fines. Steady-state phase at the unburned periphery; would also recrystallize from tire-pyrolysis ZnS-char if the SSR front reaches buried tires (handoff doc cites this as a documented mechanism — Polymers 2023 review)."
+        }
+      },
+      "player_brief": "Bridgeton cell, St. Louis metropolitan area. Closed mid-2000s as a municipal landfill; in 2010 a subsurface smoldering reaction ignited at depth and has been advancing through the buried mass at >150°C ever since, monitored continuously by the Missouri Department of Natural Resources. The cell is the project's first non-equilibrium scenario: the steady-state mineralogy of an unburned MSW body still runs at the periphery, but the SSR's footprint has rewritten the chemistry on a fourth axis. Hydrocalumite, anhydrite, plumbojarosite, tinnunculite — phases that would never coexist at unburned MSG or Halbenrain — register here because the fire's timing is the variable. Read the chemistry as event-captured rather than equilibrium-resolved."
     }
 
   }

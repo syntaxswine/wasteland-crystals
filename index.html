@@ -482,6 +482,11 @@ const MINERAL_COLORS = {
     // Native metals
     native_copper: "#b87038", // copper red-brown
     native_silver: "#dcdce0", // silver-grey
+    // Burn-flagged phases (HANDOFF-BURN-ZONE.md catalog activation)
+    hydrocalumite: "#d8c878", // pale yellow hexagonal platy
+    anhydrite: "#e0e4e8", // tabular white-pale-grey
+    plumbojarosite: "#9c7028", // ochre-brown earthy
+    tinnunculite: "#f0e8b4", // pale yellow fibrous
 };
 const FALLBACK_DOT_COLOR = "#888888";
 function mineralDotColor(mineralId) {
@@ -604,6 +609,91 @@ function _itemInZone(item, zone, geom) {
     // confines them to the waste body), so the LCS biofilm zone has no items.
     return false;
 }
+// Sample a point inside one of the three event states (burning / halo /
+// frozen_metastable). center_tile + radii are in cell-local tile coords;
+// the function returns world-meter coords (x_m, y_m) matching the
+// renderer's X()/Y() input convention.
+function _sampleEventPoint(event, state, geom, rng) {
+    const ext = event.spatial_extent ?? {};
+    const centerCol = (ext.center_tile && ext.center_tile[0]) ?? 0;
+    const centerRow = (ext.center_tile && ext.center_tile[1]) ?? 0;
+    // Tile size = 1 m (matches 07-cell-population.ts TILE_SIZE_M).
+    const cxM = geom.nativeFlankWidthM + (centerCol + 0.5);
+    const cyM = geom.cellTopYM + (centerRow + 0.5);
+    const rBurn = (ext.radius_burning_tiles ?? 0);
+    const rHalo = (ext.radius_halo_tiles ?? 0);
+    const rFrozen = (ext.radius_frozen_tiles ?? 0);
+    let rMin = 0;
+    let rMax = 0;
+    if (state === "burning") {
+        rMin = 0;
+        rMax = rBurn;
+    }
+    else if (state === "halo") {
+        rMin = rBurn;
+        rMax = rHalo;
+    }
+    else {
+        rMin = rHalo;
+        rMax = rFrozen;
+    }
+    if (rMax <= rMin) {
+        // Empty annulus — fall back to the event center.
+        return { x_m: cxM, y_m: cyM };
+    }
+    // Sample uniformly in the annulus area: r ~ sqrt(uniform * (rMax^2 - rMin^2) + rMin^2)
+    const r = Math.sqrt(rMin * rMin + rng() * (rMax * rMax - rMin * rMin));
+    const theta = rng() * 2 * Math.PI;
+    return {
+        x_m: cxM + r * Math.cos(theta),
+        y_m: cyM + r * Math.sin(theta),
+    };
+}
+// Test whether the placed item's CENTER falls inside a given event state's
+// ring (burning / halo / frozen_metastable annulus). Items live in WORLD-
+// meter coords; event centers live in cell-local tile coords, so we
+// convert the event center to world meters first and then measure radial
+// distance.
+function _itemInEventRing(item, event, state, geom) {
+    const ext = event.spatial_extent ?? {};
+    const centerCol = (ext.center_tile && ext.center_tile[0]) ?? 0;
+    const centerRow = (ext.center_tile && ext.center_tile[1]) ?? 0;
+    const cxM = geom.nativeFlankWidthM + (centerCol + 0.5);
+    const cyM = geom.cellTopYM + (centerRow + 0.5);
+    const dx = item.x_m - cxM;
+    const dy = item.y_m - cyM;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const rBurn = (ext.radius_burning_tiles ?? 0);
+    const rHalo = (ext.radius_halo_tiles ?? 0);
+    const rFrozen = (ext.radius_frozen_tiles ?? 0);
+    if (state === "burning")
+        return dist <= rBurn;
+    if (state === "halo")
+        return dist > rBurn && dist <= rHalo;
+    return dist > rHalo && dist <= rFrozen;
+}
+// Decide which event states host a mineral, given its chemistry_phase tags.
+// A mineral with chemistry_phase ["burn_zone"] grows in the burning core.
+// ["burn_halo"] grows in the halo annulus AND the frozen-metastable ring
+// (the halo's chemistry persists structurally in frozen tiles). A mineral
+// with both ["burn_zone", "burn_halo"] grows across the active and halo
+// rings. ["atmospheric_overlay"] grows in the frozen-metastable ring's
+// outermost surface. Returns the list of states this mineral occupies.
+function _eventStatesForMineral(mineralEntry) {
+    const phases = (mineralEntry && mineralEntry.chemistry_phase) || [];
+    const states = [];
+    if (phases.includes("burn_zone"))
+        states.push("burning");
+    if (phases.includes("burn_halo")) {
+        states.push("halo");
+        states.push("frozen_metastable");
+    }
+    if (phases.includes("atmospheric_overlay")) {
+        if (!states.includes("frozen_metastable"))
+            states.push("frozen_metastable");
+    }
+    return states;
+}
 function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessionSeed = 0) {
     const dots = [];
     if (!scenario || !zoneSpec)
@@ -616,6 +706,7 @@ function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessi
         const dotsPerZone = _dotsForRole(role);
         const mineralEntry = mineralSpec ? mineralSpec[mineralId] : null;
         const mineralSubstrates = (mineralEntry && mineralEntry.substrate_grows_on) || [];
+        // ── Steady-state zone placement ──
         // Find which zones reference this mineral in expected_mineral_clusters.
         // Note: NOT filtered by scenario.active_zones — see file header for why.
         for (const zoneId of Object.keys(zoneSpec)) {
@@ -647,6 +738,8 @@ function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessi
                         zone_id: zoneId,
                         host_item_id: host.id,
                         host_item_class: host.class_id,
+                        event_id: null,
+                        event_state: null,
                     });
                 }
                 else {
@@ -659,7 +752,66 @@ function generateCrystalDots(scenario, zoneSpec, mineralSpec, items, geom, sessi
                         zone_id: zoneId,
                         host_item_id: null,
                         host_item_class: null,
+                        event_id: null,
+                        event_state: null,
                     });
+                }
+            }
+        }
+        // ── Event-overlay placement ──
+        // Per proposals/HANDOFF-BURN-ZONE.md: burn-flagged minerals nucleate
+        // inside event rings, not steady-state zones. For each event in the
+        // scenario, compute which event states this mineral occupies (from
+        // its chemistry_phase tags), then place dots inside those rings.
+        // Host-anchoring still applies — if a substrate-matching item sits
+        // in the ring, the dot anchors to it; otherwise the dot falls back
+        // to ring-uniform sampling.
+        const events = Array.isArray(scenario.events) ? scenario.events : [];
+        const eventStates = _eventStatesForMineral(mineralEntry);
+        if (events.length > 0 && eventStates.length > 0) {
+            for (const ev of events) {
+                for (const state of eventStates) {
+                    const candidateHosts = mineralSubstrates.length > 0
+                        ? itemList.filter((it) => _substratesMatch(it.substrate_tokens, mineralSubstrates) && _itemInEventRing(it, ev, state, geom))
+                        : [];
+                    const seed = _hashStr(`${scenario.id}|${mineralId}|event:${ev.id}:${state}|${sessionSeed}`);
+                    const rng = _mulberry32(seed);
+                    // Per-state dot count: same evidence-role scaling as zone dots,
+                    // so directly_observed at burn_zone reads the same density as
+                    // directly_observed at methanogenic_core.
+                    for (let i = 0; i < dotsPerZone; i++) {
+                        const syntheticZoneId = `event:${ev.id}:${state}`;
+                        if (candidateHosts.length > 0) {
+                            const host = candidateHosts[i % candidateHosts.length];
+                            const jitterX = (rng() - 0.5) * host.w_m * 0.6;
+                            const jitterY = (rng() - 0.5) * host.h_m * 0.6;
+                            dots.push({
+                                x_m: host.x_m + jitterX,
+                                y_m: host.y_m + jitterY,
+                                mineral_id: mineralId,
+                                evidence_role: role,
+                                zone_id: syntheticZoneId,
+                                host_item_id: host.id,
+                                host_item_class: host.class_id,
+                                event_id: ev.id,
+                                event_state: state,
+                            });
+                        }
+                        else {
+                            const pt = _sampleEventPoint(ev, state, geom, rng);
+                            dots.push({
+                                x_m: pt.x_m,
+                                y_m: pt.y_m,
+                                mineral_id: mineralId,
+                                evidence_role: role,
+                                zone_id: syntheticZoneId,
+                                host_item_id: null,
+                                host_item_class: null,
+                                event_id: ev.id,
+                                event_state: state,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -866,6 +1018,122 @@ function _narrateGoslarite(_scenario, _zoneId, available) {
                 : "galvanized corrosion under acidic leachate releases Zn²⁺; Zn²⁺ + SO4²⁻ pairing is the dominant initial fate"));
     return `Galvanized steel under acidic leachate corrodes at predictable rate: ${sourcesClause}. Goslarite isn't a stable phase — it crystallizes seasonally as pore waters concentrate during dry intervals, redissolves with the next rain, recrystallizes again. The acicular efflorescent crust pulses rather than accumulates, marking the cell's seasonal evaporation cycle on every rusting galvanized surface.`;
 }
+// ── Burn-overlay narrators (HANDOFF-BURN-ZONE.md §"narrator pattern for
+// burn-derived phases") ──
+//
+// Open with the FIRE event, not the substrate. Causal chain runs through
+// the burn: fuel + ignition → flash transformation → quench → metastable
+// capture. Closer reframes the chemistry as event-captured rather than
+// equilibrium-resolved. Burn narrators take an additional `event` param
+// (the events[] entry from the scenario) so the prose can name the
+// specific fire and its citations.
+function _eventLocaleClause(event, scenario) {
+    // Composes "at Bridgeton's subsurface smoldering reaction (active 2010-
+    // present, MO DNR monitoring window)" or similar. Falls back gracefully
+    // when the event is missing fields.
+    const cell = _scenarioCellName(scenario);
+    if (!event)
+        return `at ${cell}`;
+    const typeWord = (event.type ?? "fire").toString().replace(/_/g, " ");
+    const documented = event.evidence_basis === "documented";
+    const hedge = documented ? "" : "hypothetical ";
+    return `at ${cell}'s ${hedge}${typeWord}`;
+}
+function _eventStateLabel(state) {
+    if (state === "burning")
+        return "the active burning core";
+    if (state === "halo")
+        return "the halo's quenching alteration ring";
+    if (state === "frozen_metastable")
+        return "the frozen-metastable scar where the front already passed";
+    return "the burn footprint";
+}
+function _narrateHydrocalumite(scenario, _zoneId, available, event, eventState) {
+    const locale = _eventLocaleClause(event, scenario);
+    const ring = _eventStateLabel(eventState);
+    const cementSource = _phrase("concrete_thermal_decomposition", available);
+    const chlorideSource = _phrase("pvc_pyrolysis_hcl", available);
+    const leadSource = _phrase("battery_pb_pyrolysis", available);
+    const cementClause = cementSource
+        ? `${cementSource} flashed to calcium-aluminate hydrates`
+        : "the cement matrix in the C&D fraction flashed to calcium-aluminate hydrates";
+    const chlorideClause = chlorideSource
+        ? `${_capitalize(chlorideSource)} fed the chemistry`
+        : "Chloride brine generated at the burn front fed the chemistry";
+    const leadClause = leadSource
+        ? `Hydrocalumite locks Pb structurally rather than chemically — ${leadSource} substitutes for Ca²⁺ in the lattice, fixing lead by lattice substitution rather than sulfide precipitation.`
+        : "Hydrocalumite locks Pb structurally rather than chemically — Pb²⁺ substitutes for Ca²⁺ in the lattice, fixing lead by lattice substitution rather than sulfide precipitation.";
+    return `Where the cell's surface fire reached the buried concrete fragments ${locale}, ${cementClause} that, in steady-state alkaline chemistry, would have lost their chloride substituents to leachate flow within months. The fire's quench was fast enough to trap the Cl in the lattice — Friedel's salt, the burn-halo's Pb-immobilization phase, locked at ${ring}. ${leadClause} ${chlorideClause}; the timing froze it. The cell's lead exposure, post-fire, is fixed not because the chemistry resolved but because the fire ended before the chemistry could.`;
+}
+function _narrateAnhydrite(scenario, _zoneId, available, event, eventState) {
+    const locale = _eventLocaleClause(event, scenario);
+    const ring = _eventStateLabel(eventState);
+    const dehydration = _phrase("drywall_sulfate_dehydration", available);
+    const dehydrationClause = dehydration
+        ? `${_capitalize(dehydration)} drove off both water molecules`
+        : "Drywall gypsum in the cell's C&D fraction lost both water molecules in fire heat";
+    return `${dehydrationClause} above ~120°C, leaving anhydrous CaSO₄ in place of the dihydrate gypsum. ${_capitalize(locale)}, the burn front's heat rewrote the sulfate phase by dehydration alone — no leachate intermediate, no dissolution-reprecipitation, just water expelled from the lattice. What survives at ${ring} is set entirely by quench rate: fast-quench fires freeze anhydrite; slow-quench fires let ambient pore water re-enter and the chemistry anneals back to gypsum within months. The phase that names the burn-zone timing problem directly. Same sulfate, two minerals, depending on when the heat ended.`;
+}
+function _narratePlumbojarosite(scenario, _zoneId, available, event, eventState) {
+    const locale = _eventLocaleClause(event, scenario);
+    const ring = _eventStateLabel(eventState);
+    const lead = _phrase("battery_pb_pyrolysis", available);
+    const iron = _phrase("rebar_iron", available);
+    const acidBrine = _phraseAny(["post_burn_acid_brine", "drywall_sulfate"], available);
+    const sourceClauses = [];
+    if (lead)
+        sourceClauses.push(lead);
+    if (iron)
+        sourceClauses.push(iron);
+    if (acidBrine)
+        sourceClauses.push(acidBrine);
+    const sourcesText = sourceClauses.length > 0
+        ? sourceClauses.slice(0, -1).join(", ") + (sourceClauses.length > 1 ? ", and " : "") + sourceClauses[sourceClauses.length - 1]
+        : "the burn-mobilized Pb, iron, and post-quench acidic brine";
+    return `${_capitalize(locale)}, the burn front's heat volatilized lead-acid battery casings into Pb-oxide fume that condensed on cooler tile surfaces; the cooling acidic chloride-and-sulfate brine in the alteration ring redissolved this oxide as Pb²⁺ and met dissolved Fe²⁺ from corroded rebar. Where ${sourcesText} converged at low-pH, oxidizing, post-quench conditions, plumbojarosite crystallized as ochre-brown earthy crusts at the rebar-battery-residue interface. Specifically marks the cooling window — its stability requires both the acidic sulfate brine the burn halo provides AND the ambient temperature the post-quench produces. ${_capitalize(ring)} hosts the assemblage. When the fire ended is encoded in the mineral itself.`;
+}
+function _narrateTinnunculite(scenario, _zoneId, available, event, eventState) {
+    const locale = _eventLocaleClause(event, scenario);
+    const ring = _eventStateLabel(eventState);
+    const uricAcid = _phrase("biogenic_uric_acid", available);
+    const oxidation = _phrase("post_burn_atmospheric_oxidation", available);
+    const uricClause = uricAcid
+        ? `${_capitalize(uricAcid)} accumulated in the organic-rich fines fraction over decades`
+        : "Diaper urea, pet waste, and protein-decomposition products accumulated uric acid in the organic-rich fines fraction over decades";
+    const oxidClause = oxidation
+        ? `${oxidation} attacked the carbonized residues`
+        : "atmospheric oxidants attacked the carbonized residues";
+    return `${uricClause}. ${_capitalize(locale)}, the burn front's outermost margin exposed those residues to rainfall and atmospheric oxygen — ${oxidClause} at ${ring}. Following the next significant rainfall, the uric acid recrystallized at the surface as fibrous pale-yellow rinds, IMA-described as tinnunculite from kestrel pellets but running the same chemistry here on the corpse of a city's diaper waste. The most narratively peculiar phase in the catalog: a biomineral named for a falcon, growing on the pyrolyzed remnants of human consumption.`;
+}
+function _narrateJarosite(scenario, _zoneId, available, event, eventState) {
+    // Branch on event context: AMD-acid (steady-state acidogenic_horizon)
+    // vs burn-halo (event ring). Same mineral, different prose.
+    if (event && (eventState === "halo" || eventState === "frozen_metastable")) {
+        const locale = _eventLocaleClause(event, scenario);
+        const ring = _eventStateLabel(eventState);
+        const acidBrine = _phrase("post_burn_acid_brine", available);
+        const iron = _phrase("rebar_iron", available);
+        const sulfate = _phrase("drywall_sulfate", available);
+        const sourceClauses = [];
+        if (acidBrine)
+            sourceClauses.push(acidBrine);
+        if (iron)
+            sourceClauses.push(iron);
+        if (sulfate)
+            sourceClauses.push(sulfate);
+        const sourcesText = sourceClauses.length > 0
+            ? sourceClauses.slice(0, -1).join(", ") + (sourceClauses.length > 1 ? ", and " : "") + sourceClauses[sourceClauses.length - 1]
+            : "the post-quench acidic brine, ferrous iron, and residual sulfate";
+        return `${_capitalize(locale)}, ${ring} ran a chemistry indistinguishable from acid-mine-drainage at higher temperature: ${sourcesText} converged where the burn front had passed, and jarosite crystallized as ochre-yellow earthy crusts on the burn-affected rebar. The same mineral that forms in the cell's steady-state acidogenic horizon registers here too — but the burn halo runs the chemistry harder, faster, and at higher T, so the burn-halo jarosite is the more aggressive phase even though the catalog signature is identical. Geological vs anthropogenic vs event-driven: the same atoms keep finding the same crystal habit.`;
+    }
+    // Steady-state acidogenic_horizon variant.
+    const sulfate = _phrase("drywall_sulfate", available);
+    const iron = _phrase("rebar_iron", available);
+    const acidic = sulfate && iron
+        ? `${_capitalize(sulfate)} and ${iron} converge under the cell's acidogenic-phase low-pH leachate`
+        : "Sulfate and ferrous iron converge under the cell's acidogenic-phase low-pH leachate";
+    return `${acidic}, where biogenic acid oxidation drives jarosite precipitation as ochre-yellow earthy crusts on rebar and Fe substrate. The classic acid-mine-drainage analog — chemistry parallel runs at any cell whose acid horizon hasn't yet drained into the methanogenic front. Jarosite stability tells you the cell is still actively acidic; methanogenic-front migration consumes both the acid and the iron, leaving jarosite as a relict horizon below the advancing alkaline chemistry.`;
+}
 function _narrateStruvite(_scenario, _zoneId, available) {
     const ammonium = _phrase("protein_nh4", available);
     const phosphate = _phraseAny(["food_phosphate", "manure_phosphate"], available);
@@ -895,11 +1163,13 @@ function _fallbackNarrative(mineral, available, _zoneId) {
     return `${intro}\n\nFrom this cell's confirmed substrate origins: ${namedSources}. These precursors, under ${phaseToken}-phase chemistry, deliver the ingredients ${mineral.formula} requires. ${mineral.description ?? ""}`;
 }
 // ── Dispatcher ──
-function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem) {
+function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem, eventEntry, eventState) {
     const m = { ...(mineralEntry ?? {}), _id: mineralId };
     const { available, absent } = _composeAvailablePrecursors(m, scenario, precursorSpec);
     let paragenesis = "";
     let authored = true;
+    const ev = eventEntry ?? null;
+    const evState = eventState ?? null;
     switch (mineralId) {
         case "pyromorphite":
             paragenesis = _narratePyromorphite(scenario, zoneId, available);
@@ -924,6 +1194,21 @@ function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, pr
             break;
         case "struvite":
             paragenesis = _narrateStruvite(scenario, zoneId, available);
+            break;
+        case "hydrocalumite":
+            paragenesis = _narrateHydrocalumite(scenario, zoneId, available, ev, evState);
+            break;
+        case "anhydrite":
+            paragenesis = _narrateAnhydrite(scenario, zoneId, available, ev, evState);
+            break;
+        case "plumbojarosite":
+            paragenesis = _narratePlumbojarosite(scenario, zoneId, available, ev, evState);
+            break;
+        case "tinnunculite":
+            paragenesis = _narrateTinnunculite(scenario, zoneId, available, ev, evState);
+            break;
+        case "jarosite":
+            paragenesis = _narrateJarosite(scenario, zoneId, available, ev, evState);
             break;
         default:
             paragenesis = _fallbackNarrative(m, available, zoneId);
@@ -960,12 +1245,22 @@ function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, pr
             paragenesis += `\n\nHost surface: ${hostLabel}. The crystal nucleated on this object's substrate (${(hostItem.substrate_tokens ?? []).join(", ")}) where the local chemistry met the mineral's stability window.`;
         }
     }
+    // Synthetic zone label for event-bound dots: "BURN HALO — bridgeton SSR".
+    let displayZoneLabel = zoneEntry ? zoneEntry.label : zoneId;
+    if (ev && evState) {
+        const stateLabel = evState === "burning" ? "BURN CORE"
+            : evState === "halo" ? "BURN HALO"
+                : evState === "frozen_metastable" ? "FROZEN-METASTABLE SCAR"
+                    : "BURN OVERLAY";
+        const evType = (ev.type ?? "event").toString().replace(/_/g, " ").toUpperCase();
+        displayZoneLabel = `${stateLabel} — ${evType}`;
+    }
     return {
         mineralId,
         mineralName: _displayMineralName(mineralId),
         formula: m.formula ?? "",
         habit: _displayHabit(m.habit ?? ""),
-        zoneLabel: zoneEntry ? zoneEntry.label : zoneId,
+        zoneLabel: displayZoneLabel,
         evidenceRole,
         evidenceNote,
         paragenesis,
@@ -976,6 +1271,8 @@ function narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, pr
         host_item_label: hostLabel,
         host_item_class: hostClass,
         host_item_id: hostId,
+        event_id: ev ? (ev.id ?? null) : null,
+        event_state: evState,
     };
 }
 
@@ -1553,7 +1850,103 @@ function generatePlacedItems(scenario, itemSpec, geom, sessionSeed = 0) {
 //        substrate-distribution randomness. Determinism within a session
 //        is preserved (the seed is fixed once BEGIN is pressed); fresh
 //        sessions produce fresh layouts.
-const WASTELAND_VERSION = "v9";
+//   v10 — burn-zone activation: Bridgeton SSR scenario + event overlay
+//        (2026-05-07): per proposals/HANDOFF-BURN-ZONE.md the chemistry
+//        catalog has been quietly waiting for burn flags to do anything;
+//        v10 lights them up. Activates the fourth axis of the chemistry
+//        stack — zone × substrate × chemistry × EVENT — by adding a
+//        documented-fire scenario, burn-flagged catalog additions, an
+//        event-overlay renderer pass, and burn-narrator branches.
+//        - data/minerals.json schema bumped to 0.3.0; +4 minerals.
+//          Hydrocalumite (Friedel's salt — landfill_specific via Saffarzadeh
+//          2011 + Piantone HAL synthesis MSWI bottom-ash work; locks Pb
+//          structurally rather than chemically), anhydrite (anthropogenic_
+//          documented; the diagnostic 'fire dried me out' phase from
+//          drywall sulfate dehydration), plumbojarosite (chemistry_
+//          predicted; the burn-halo Pb-Fe-sulfate where cooling acidic
+//          chloride brine meets fire-exposed lead), tinnunculite (chemistry_
+//          predicted in landfills; uric-acid biomineral from diapers + pet
+//          waste reacting with post-burn oxidants — the most narratively
+//          peculiar entry in the catalog). Mixed mineralogical class
+//          activated; chemistry_phase vocabulary gains atmospheric_overlay
+//          for tinnunculite's post-burn rainfall window. Total catalog: 27
+//          minerals (was 23). Jarosite gains chemistry_phase: ['acid',
+//          'burn_halo'] so the same atoms can register at both the steady-
+//          state acidogenic_horizon and the post-quench halo.
+//        - data/precursors.json schema bumped to 0.2.0; +7 burn-event-
+//          overlay precursors (drywall_sulfate_dehydration, concrete_
+//          thermal_decomposition, pvc_pyrolysis_hcl, battery_pb_pyrolysis,
+//          post_burn_acid_brine, biogenic_uric_acid, post_burn_atmospheric_
+//          oxidation), each with phase_window: ['burn_zone'] | ['burn_halo']
+//          | ['atmospheric_overlay']. Total: 27 precursors (was 20).
+//        - data/scenarios.json schema bumped to 0.2.0; +1 scenario.
+//          Bridgeton (MO, USA) at landfill_specific evidence — the
+//          documented subsurface smoldering reaction characterized by MO
+//          DNR since 2010, the strongest documented landfill-fire scenario
+//          available. Aluminum-dross + leachate exotherm trigger (Calder &
+//          Stark 2010 J Hazard Mater). New events[] array on the scenario
+//          schema; Bridgeton populates it with a single subsurface_
+//          smoldering event at concentric-circular spatial extent
+//          (radius_burning_tiles=4, radius_halo_tiles=7, radius_frozen_
+//          tiles=11). Substrate inventory adds aluminum_dross (documented)
+//          + tire_pile_burn_residue (implied) on top of the standard MSW
+//          set. expected_species: hydrocalumite/anhydrite/plumbojarosite/
+//          tinnunculite/ettringite/goethite/jarosite/calcite/sphalerite —
+//          burn-flagged + steady-state coexist because Bridgeton's burn
+//          front is a non-equilibrium overlay, not a steady-state phase
+//          replacement.
+//        - js/99-renderer-cross-section.ts adds an event-overlay layer
+//          rendering THREE concentric tinted rings per event: burning core
+//          (hot-orange, fill-opacity 0.42), halo annulus (chloride-brine
+//          cyan-purple, fill-opacity 0.26 with dashed boundary), frozen-
+//          metastable scar (faint scarred amber, fill-opacity 0.16 with
+//          finer dashes). Composes OVER the steady-state zone tints; the
+//          unburned periphery still reads its base zone chemistry through
+//          the gaps. Per HANDOFF-BURN-ZONE.md UX discipline: tints are
+//          observation-shape, no glow / pulse / saturated alarm-red.
+//        - js/03-crystal-positions.ts gains _eventStatesForMineral,
+//          _itemInEventRing, _sampleEventPoint helpers + an event-overlay
+//          placement pass. For each (event, mineral) where the mineral has
+//          burn_zone / burn_halo / atmospheric_overlay in chemistry_phase,
+//          dots place inside the matching ring(s) of the event. Host-
+//          anchoring still applies (substrate-matching items inside the
+//          ring become hosts; otherwise ring-uniform sampling). New event_
+//          id + event_state fields on CrystalDot; data-event-id +
+//          data-event-state attributes on the rendered <circle>.
+//        - js/04-narrators.ts adds 5 burn-narrators (hydrocalumite,
+//          anhydrite, plumbojarosite, tinnunculite, jarosite — the latter
+//          context-branched between AMD-acid steady-state and burn-halo
+//          event variants). All five follow HANDOFF-BURN-ZONE.md §
+//          "narrator pattern for burn-derived phases": event-sequence
+//          opener (the FIRE is the actor, not the substrate), causal chain
+//          through fuel + ignition → flash transformation → quench →
+//          metastable capture, and closer reframing chemistry as
+//          event-captured rather than equilibrium-resolved. narrateCrystal
+//          gains optional eventEntry + eventState params; CrystalNarrative
+//          gains event_id + event_state fields; zone label resolves to a
+//          synthetic 'BURN HALO — SUBSURFACE SMOLDERING' for event-bound
+//          dots so the examination panel reads correctly.
+//        - index.html boot harness threads data-event-id/data-event-state
+//          off the clicked dot and looks up the matching scenario.events[]
+//          entry, passing it into narrateCrystal alongside the host item.
+//        Engine implications: the events schema is structured for a
+//        future quench-rate-gating engine pass (per HANDOFF-BURN-ZONE.md
+//        recommended sequence step 6). Current renderer reads the radii
+//        directly; a chemistry engine arriving later will compute them
+//        from ignition_step + duration_steps + quench_rate without
+//        breaking the renderer's contract. The Bridgeton SSR is the
+//        first scenario the boss asked the project to build toward —
+//        same atoms, same cell, different mineral assemblage at the burn
+//        front than at its unburned periphery, with the timing of the
+//        fire's end encoded in which metastable phases survived.
+//        Counter-discipline note (per HANDOFF-BURN-ZONE.md §"UX layer
+//        protections"): two-column catalog asymmetry was deferred at
+//        the boss's instruction — the burn scenario shipped first.
+//        Pulse-not-chime and no-toast disciplines hold by absence: there
+//        are no notifications, sound effects, or achievement banners
+//        for the burn event. The fire is observed via tile tints and
+//        catalog updates, not celebrated.
+const WASTELAND_VERSION = "v10";
 
 // ── 99-renderer-cross-section.js ──
 
@@ -1873,6 +2266,53 @@ function buildSchematicSVG(cfg, opts) {
         }
         parts.push(`</g>`); // end zone-overlay group
     }
+    // ── Event overlay (fire / smoldering footprints) ──
+    // Per proposals/HANDOFF-BURN-ZONE.md: events are the fourth axis of
+    // chemistry (zone × substrate × chemistry × event). Renders concentric
+    // tinted rings for each event in scenario.events: a burning-core disk
+    // (hot orange, opaque), a halo annulus (chloride-brine cooler tint),
+    // and an outer frozen-metastable annulus (faint scar tint). Ring radii
+    // are read directly from spatial_extent.radius_*_tiles — no engine
+    // time math yet. Composes OVER the steady-state zone tints; the
+    // unburned periphery still reads its normal chemistry through the
+    // base zones.
+    if (scenario && Array.isArray(scenario.events) && scenario.events.length > 0) {
+        parts.push(`<g class="event-overlay">`);
+        for (const ev of scenario.events) {
+            if (!ev.spatial_extent || ev.spatial_extent.type !== "concentric_circular")
+                continue;
+            const ext = ev.spatial_extent;
+            const centerCol = ext.center_tile[0];
+            const centerRow = ext.center_tile[1];
+            // Event center in world meters: cell-local tile coords + native flank offset.
+            const cxM = cfg.nativeFlankWidthM + (centerCol + 0.5);
+            const cyM = cellTopYM + (centerRow + 0.5);
+            const cxPx = X(cxM);
+            const cyPx = Y(cyM);
+            // Tile units = 1 m = PX_PER_M pixels.
+            const rBurn = (ext.radius_burning_tiles ?? 0) * PX_PER_M;
+            const rHalo = (ext.radius_halo_tiles ?? 0) * PX_PER_M;
+            const rFrozen = (ext.radius_frozen_tiles ?? 0) * PX_PER_M;
+            // Frozen-metastable scar (outermost, paint first so halo + core
+            // sit on top).
+            if (rFrozen > rHalo) {
+                parts.push(`<circle class="event-frozen" cx="${cxPx}" cy="${cyPx}" r="${rFrozen}" data-event-id="${ev.id}" data-state="frozen_metastable" />`);
+            }
+            // Halo annulus.
+            if (rHalo > rBurn) {
+                parts.push(`<circle class="event-halo" cx="${cxPx}" cy="${cyPx}" r="${rHalo}" data-event-id="${ev.id}" data-state="halo" />`);
+            }
+            // Burning core (innermost, hottest).
+            if (rBurn > 0) {
+                parts.push(`<circle class="event-burning" cx="${cxPx}" cy="${cyPx}" r="${rBurn}" data-event-id="${ev.id}" data-state="burning" />`);
+            }
+            // Event label — small, just above the burning core, naming the event type.
+            const labelY = cyPx - rFrozen - 4;
+            const labelText = (ev.type ?? "event").toString().toUpperCase().replace(/_/g, " ");
+            parts.push(`<text class="event-label" x="${cxPx}" y="${labelY}" text-anchor="middle">${labelText}</text>`);
+        }
+        parts.push(`</g>`); // end event-overlay
+    }
     // ── Crystal-dot overlay ──
     // Placeholder for the future per-cell crystal-growth output. Generates
     // deterministic dots from scenario.expected_species × zones.json
@@ -1909,7 +2349,9 @@ function buildSchematicSVG(cfg, opts) {
             // strings when the dot fell back to zone-uniform placement).
             const hostId = d.host_item_id ?? "";
             const hostClass = d.host_item_class ?? "";
-            parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" />`);
+            const eventId = d.event_id ?? "";
+            const eventState = d.event_state ?? "";
+            parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" data-event-id="${eventId}" data-event-state="${eventState}" />`);
         }
         parts.push(`</g>`); // end crystal-dots group
     }
@@ -2140,6 +2582,23 @@ function svgStyle() {
     /* Selected dot — a brighter halo so the examined crystal reads at a
        glance against the cell's other paragenesis. */
     .dot.selected { stroke: #ffd76a; stroke-width: 1.2; stroke-opacity: 1.0; }
+
+    /* ── Event overlay (fire / smoldering footprints) ──
+       Three concentric rings per event: burning core (hot orange, highest
+       opacity — the fire is happening here), halo (chloride-brine cooler
+       cyan-purple tint, mid-opacity — the chemistry is currently quenching
+       here), and frozen-metastable (faint scarred amber, low opacity — the
+       front already passed and the chemistry is locked). Composes OVER the
+       steady-state zone tints; the unburned periphery still reads its base
+       chemistry through the event-overlay's gaps. Per HANDOFF-BURN-ZONE.md:
+       'a burn event should never feel like an achievement; it should feel
+       like reading a quarterly report from a future surveyor.' Tints are
+       observation-shape, not achievement-shape — no glow, no pulse, no
+       saturated alarm-red. */
+    .event-burning { fill: #d44820; fill-opacity: 0.42; stroke: #f08038; stroke-width: 0.8; stroke-opacity: 0.75; }
+    .event-halo    { fill: #6c5896; fill-opacity: 0.26; stroke: #9080c0; stroke-width: 0.6; stroke-dasharray: 4 3; stroke-opacity: 0.55; }
+    .event-frozen  { fill: #8c6c40; fill-opacity: 0.16; stroke: #a88858; stroke-width: 0.5; stroke-dasharray: 2 4; stroke-opacity: 0.45; }
+    .event-label   { fill: #f0a060; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 9px; letter-spacing: 0.12em; }
 
     /* ── Item layer ──
        Discrete inventory items snapped to a 1m × 1m tile grid. Coarse-rigid
@@ -2414,7 +2873,18 @@ function svgStyle() {
         }
         var hostItemId = target.getAttribute("data-host-item-id") || "";
         var hostItem = lookupHostItem(hostItemId);
-        var narrative = narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem);
+        // Event context (v10): burn-overlay dots carry data-event-id +
+        // data-event-state. Resolve the event entry from the scenario's
+        // events[] array so burn narrators can name the specific fire.
+        var eventId = target.getAttribute("data-event-id") || "";
+        var eventState = target.getAttribute("data-event-state") || "";
+        var eventEntry = null;
+        if (eventId && scenario && Array.isArray(scenario.events)) {
+          for (var ei = 0; ei < scenario.events.length; ei++) {
+            if (scenario.events[ei].id === eventId) { eventEntry = scenario.events[ei]; break; }
+          }
+        }
+        var narrative = narrateCrystal(mineralId, scenario, zoneId, mineralEntry, zoneEntry, precursorSpec, hostItem, eventEntry, eventState || null);
         var cellName = scenario && scenario.location ? (scenario.location.locality + ", " + scenario.location.country) : "(no scenario)";
         var citationsHtml = narrative.citations.length
           ? '<div class="citations">citations: ' + narrative.citations.map(escapeHtml).join("; ") + '</div>'

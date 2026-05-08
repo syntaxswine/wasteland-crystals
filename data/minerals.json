@@ -1,5 +1,5 @@
 {
-  "_schema_version": "0.2.0",
+  "_schema_version": "0.3.0",
   "_last_updated": "2026-05-07",
   "_source_of_truth_for": ["index.html", "research/landfill-chemistry-and-fires.md"],
   "_source_of_truth_note": "Canonical anthropogenic-mineral spec for Wasteland Crystals. Every entry must defer to documented chemistry — see citations field. The evidence_level field (replacing v0.1's documented_in_landfills binary) tells the truth about what kind of literature supports each entry. The literal-vug-from-buried-appliance design principle (proposals/PROPOSAL-WASTELAND-CRYSTALS.md and project memory) means substrate_grows_on values are the engineered substrate the mineral nucleates onto, not host rock.",
@@ -9,7 +9,7 @@
     "class": "Mineralogical class for filtering, engine dispatch, and renderer color: sulfate | carbonate | halide_hydroxide | hydroxide_halide | phosphate | oxide | sulfide | native | mixed.",
     "habit": "Primary crystal habit (acicular_efflorescence | hexagonal_platy | botryoidal_radial | prismatic | tabular | massive | scalenohedral | radial_acicular | tetrahedral | cubic | dendritic | etc).",
     "substrate_grows_on": "Array of substrate-type tokens this mineral preferentially nucleates on. Tokens are wasteland-crystals-specific (galvanized_steel, copper_wire, lead_acid_battery, concrete_demolition, organic_slurry, leachate_collection_pipe, pcb_solder_silver, etc). Empty array = environmental, not substrate-bound.",
-    "chemistry_phase": "Array of leachate-phase tokens favoring growth: acid (pH 4.5-6.5, yrs 1-10) | methanogenic (pH 7-8.5, decades) | stable (pH 7.5-9, humic, centuries) | alkaline_cap (pH 10-12 from cement) | burn_zone (pH 10-12 oxidizing hot) | burn_halo (HCl-rich brine adjacent to burn).",
+    "chemistry_phase": "Array of leachate-phase tokens favoring growth: acid (pH 4.5-6.5, yrs 1-10) | methanogenic (pH 7-8.5, decades) | stable (pH 7.5-9, humic, centuries) | alkaline_cap (pH 10-12 from cement) | burn_zone (pH 10-12 oxidizing hot, event-overlay only) | burn_halo (post-quench HCl-rich brine adjacent to burn, event-overlay only) | atmospheric_overlay (rainfall + atmospheric oxidants encountering biological residues at the post-burn alteration ring; tinnunculite specifically).",
     "decay_precursor": "Array of polymer/material decay-product tokens that supply this mineral's chemistry: pvc_hcl, drywall_sulfate, battery_h2so4, cement_calcite, food_phosphate, protein_nh4, rebar_iron, organic_co2, organic_reduction, pcb_silver_dissolution, pcb_gold_dissolution, etc.",
     "nucleation_sigma": "Minimum supersaturation for nucleation (default 1.0; >1.0 = harder to nucleate; native metals and burn-products typically 1.2-1.6).",
     "max_size_cm": "Hard cap on crystal size in centimeters; 2× world record where applicable.",
@@ -25,16 +25,16 @@
   },
 
   "_audit_summary": {
-    "total_minerals": 23,
-    "classes_covered": ["sulfate", "carbonate", "halide_hydroxide", "hydroxide_halide", "phosphate", "oxide", "sulfide", "native"],
-    "classes_pending": ["mixed"],
+    "total_minerals": 27,
+    "classes_covered": ["sulfate", "carbonate", "halide_hydroxide", "hydroxide_halide", "phosphate", "oxide", "sulfide", "native", "mixed"],
+    "classes_pending": [],
     "by_evidence_level": {
-      "landfill_specific": 7,
-      "anthropogenic_documented": 9,
+      "landfill_specific": 8,
+      "anthropogenic_documented": 10,
       "geological_analog": 4,
-      "chemistry_predicted": 3
+      "chemistry_predicted": 5
     },
-    "_notes": "v2 catalog expansion + evidence-level refinement. v1 used a binary documented_in_landfills flag that conflated 'observed in real landfill paper' with 'documented in anthropogenic/geological literature broadly' — the four-value evidence_level replaces it and re-categorizes all entries honestly. Several v1 entries marked documented:true in the original 0.1.0 catalog now sit at anthropogenic_documented or chemistry_predicted because Hazen 2017's catalog presence is not the same as a peer-reviewed landfill case study. Catalog now spans 8 mineralogical classes; sulfide and native classes added in v2. The chemistry-flip suite is complete or near-complete for all four major metals: Cu (malachite/atacamite/tenorite/posnjakite/covellite/cuprite/native_copper), Pb (anglesite/pyromorphite/cerussite/galena), Zn (goslarite/simonkolleite/hydrozincite/sphalerite), Fe (vivianite/pyrite/goethite/jarosite). This 'same element, different mineral' coverage is what lets the burn-zone-inverts-chemistry mechanic actually have something to invert."
+    "_notes": "v3 burn-zone activation pass (2026-05-07). Schema bumped to 0.3.0 to mark the catalog's first event-overlay phases (zone × substrate × chemistry × event). +4 burn-flagged minerals to enable a Bridgeton-class subsurface-smoldering scenario: hydrocalumite (Friedel's salt — landfill_specific via Saffarzadeh 2011 + Piantone HAL synthesis MSWI bottom-ash work; locks Pb structurally rather than chemically), anhydrite (anthropogenic_documented; the diagnostic 'fire dried me out' phase from drywall sulfate), plumbojarosite (chemistry_predicted; the burn-halo Pb-Fe-sulfate where cooling acidic chloride brine meets fire-exposed lead), tinnunculite (chemistry_predicted in landfills; uric-acid biomineral from diapers + pet waste reacting with post-burn oxidants — the most narratively peculiar entry in the catalog). New mixed class hosts hydrocalumite. Total catalog: 27 minerals. Distribution: 8 landfill_specific, 10 anthropogenic_documented, 4 geological_analog, 5 chemistry_predicted. v2 catalog expansion + evidence-level refinement preserved; v3 only adds. The chemistry-flip suite is now complete across acid / methanogenic / alkaline / burn windows; with the burn additions, Pb in particular now has 4 phases (anglesite/pyromorphite/cerussite/plumbojarosite + galena reducing) that swap by chemistry-overlay condition. Cotunnite/laurionite Pb-chloride phases slated for a later pass when a chloride-rich tire-pile-fire scenario lands."
   },
 
   "minerals": {
@@ -464,8 +464,8 @@
       "class": "sulfate",
       "habit": "pseudo_cubic_to_earthy",
       "substrate_grows_on": ["rebar_corroded", "iron_substrate", "oxidizing_seep"],
-      "chemistry_phase": ["acid"],
-      "decay_precursor": ["drywall_sulfate", "rebar_iron", "biogenic_acid_oxidation"],
+      "chemistry_phase": ["acid", "burn_halo"],
+      "decay_precursor": ["drywall_sulfate", "rebar_iron", "biogenic_acid_oxidation", "post_burn_acid_brine"],
       "nucleation_sigma": 1.0,
       "max_size_cm": 3,
       "growth_rate_mult": 0.4,
@@ -497,6 +497,86 @@
       "description": "Native silver. Strongly reducing pore water near decaying printed circuit boards can reduce dissolved Ag(I) to elemental Ag, which grows as dendritic plates and wire-like fingers in nearby voids. The e-waste reduction crown — same supergene mechanism that produced the famous Batopilas wire silver, but on the corpse of a smartphone motherboard. Tarnishes black on subsequent exposure to even trace H2S, so a silver dendrite in the methanogenic phase often blooms from bright to grey within decades.",
       "citations": ["Hazen et al. 2017 Am Mineral 102:595 (anthropogenic native silver)"],
       "evidence_level": "geological_analog"
+    },
+
+    "hydrocalumite": {
+      "formula": "Ca2Al(OH)6Cl·2H2O",
+      "class": "mixed",
+      "habit": "hexagonal_platy",
+      "substrate_grows_on": ["concrete_demolition_burn_residue", "msw_bottom_ash_clinker", "concrete_demolition", "lead_acid_battery"],
+      "chemistry_phase": ["burn_zone", "burn_halo"],
+      "decay_precursor": ["concrete_thermal_decomposition", "pvc_pyrolysis_hcl", "battery_pb_pyrolysis"],
+      "nucleation_sigma": 1.2,
+      "max_size_cm": 1,
+      "growth_rate_mult": 0.3,
+      "T_range_C": [40, 200],
+      "pH_optimum": [10, 12],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"Ca": 200, "Al": 10, "Cl": 50, "OH": 10},
+      "color_visual": "pale_yellow_hexagonal_platy",
+      "description": "Friedel's salt, the calcium-aluminum chloride hydroxide hydrate. Forms in burn-affected MSWI bottom-ash and concrete-rich burn zones where flash thermal decomposition of cement releases reactive Ca-Al-OH species into the chloride brine generated by PVC dehydrochlorination. The diagnostic Pb-immobilization phase of the burn-halo: Pb²⁺ substitutes for Ca²⁺ in the lattice, locking lead structurally rather than chemically — fast quench traps it before steady-state alkaline chemistry would have leached the chloride substituent away. Documented in MSWI bottom-ash weathering crusts (Saffarzadeh 2011; Piantone HAL synthesis); the burn-zone counterpart of ettringite, sharing its Ca-Al-OH backbone but trading sulfate for chloride.",
+      "citations": ["Saffarzadeh et al. 2011 Waste Manage doi:10.1016/j.wasman.2011.06.010", "Piantone et al. (HAL synthesis hal-03794653)"],
+      "evidence_level": "landfill_specific"
+    },
+
+    "anhydrite": {
+      "formula": "CaSO4",
+      "class": "sulfate",
+      "habit": "tabular_to_massive",
+      "substrate_grows_on": ["drywall_burn_residue", "drywall_gypsum", "msw_bottom_ash_clinker"],
+      "chemistry_phase": ["burn_zone"],
+      "decay_precursor": ["drywall_sulfate_dehydration"],
+      "nucleation_sigma": 1.0,
+      "max_size_cm": 5,
+      "growth_rate_mult": 0.6,
+      "T_range_C": [100, 600],
+      "pH_optimum": [8, 12],
+      "redox_requirement": "any",
+      "required_ingredients": {"Ca": 200, "SO4": 100},
+      "color_visual": "white_to_pale_grey_tabular",
+      "description": "Anhydrous calcium sulfate. The diagnostic 'fire dried me out' phase: drywall gypsum (CaSO4·2H2O) loses both water molecules in fire heat above ~120°C and recrystallizes as anhydrous CaSO4. Persists if quench is fast enough to escape rehydration to gypsum — slow-quench fires anneal anhydrite back toward gypsum within months as ambient pore water re-enters; fast-quench fires (rain on the burn front, methanogenic-core contact at the buried perimeter) freeze it. Documented in industrial fire residues and as a transient phase in MSWI bottom ash before atmospheric weathering rehydrates it. The phase that names the timing problem in burn-zone chemistry directly: same sulfate, two minerals, depending on when the heat ended.",
+      "citations": ["Saffarzadeh et al. 2011 Waste Manage doi:10.1016/j.wasman.2011.06.010", "Eusden et al. ES&T (MSWI bottom-ash mineralogy)"],
+      "evidence_level": "anthropogenic_documented"
+    },
+
+    "plumbojarosite": {
+      "formula": "Pb0.5Fe3(SO4)2(OH)6",
+      "class": "sulfate",
+      "habit": "earthy_to_pseudo_cubic",
+      "substrate_grows_on": ["lead_acid_battery", "lead_solder", "lead_acid_battery_burn_residue", "rebar_corroded", "iron_substrate"],
+      "chemistry_phase": ["burn_halo"],
+      "decay_precursor": ["battery_pb_pyrolysis", "drywall_sulfate", "rebar_iron", "post_burn_acid_brine"],
+      "nucleation_sigma": 1.1,
+      "max_size_cm": 2,
+      "growth_rate_mult": 0.3,
+      "T_range_C": [20, 80],
+      "pH_optimum": [2, 5],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"Pb": 0.5, "Fe": 5, "SO4": 70, "O2": 0.3},
+      "color_visual": "ochre_brown_to_dark_yellow_earthy",
+      "description": "Lead-iron sulfate. The burn-halo Pb fate: where fire-exposed lead from battery casings and lead-solder PCB scrap meets the cooling acidic chloride-and-sulfate brine generated by PVC dehydrochlorination + drywall thermolysis at the alteration ring's outer edge. Pb partitions into the jarosite lattice in place of K. Mirrors anglesite (acid-phase Pb) and pyromorphite (stable-phase Pb) but specifically marks the post-burn cooling window — when the fire ended is encoded in the mineral itself, because plumbojarosite stability requires both the acidic sulfate brine the burn halo provides AND the cooled temperature the post-quench produces. Not yet directly observed in a peer-reviewed landfill-fire characterization; chemistry-grounded prediction.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595 (jarosite-group anthropogenic occurrences)", "Saffarzadeh et al. 2011 Waste Manage (Pb partitioning in MSWI bottom-ash, plumbojarosite not specifically named)"],
+      "evidence_level": "chemistry_predicted"
+    },
+
+    "tinnunculite": {
+      "formula": "C5H4N4O3·2H2O",
+      "class": "mixed",
+      "habit": "fibrous_to_powdery",
+      "substrate_grows_on": ["organic_slurry_burn_halo", "post_burn_organic_residue", "diaper_residue", "pet_waste_residue"],
+      "chemistry_phase": ["atmospheric_overlay"],
+      "decay_precursor": ["biogenic_uric_acid", "post_burn_atmospheric_oxidation"],
+      "nucleation_sigma": 1.3,
+      "max_size_cm": 0.3,
+      "growth_rate_mult": 0.4,
+      "T_range_C": [5, 50],
+      "pH_optimum": [4, 7],
+      "redox_requirement": "oxidizing",
+      "required_ingredients": {"uric_acid_mg_per_kg_residue": 100, "rainfall_event": 1},
+      "color_visual": "pale_yellow_to_off_white_fibrous",
+      "description": "Uric-acid dihydrate. The most narratively peculiar phase in the catalog — a biomineral named for the kestrel (Falco tinnunculus) on whose pellets it was first IMA-described. In landfill burn-halos the same chemistry runs at scale: nitrogen-rich biological residues (diaper urea + pet waste + protein decomposition products) accumulate uric acid that, after the alteration ring's atmospheric oxidants attack the post-burn carbon residues, recrystallizes at the surface as fibrous pale-yellow rinds following the next significant rainfall. IMA-recognized anthropogenic mineral species (Hazen 2017 supplementary table); has not been reported from a peer-reviewed landfill fire context, so this entry is chemistry-predicted at the landfill granularity even though its IMA pedigree is solid.",
+      "citations": ["Hazen et al. 2017 Am Mineral 102:595 (tinnunculite as IMA-recognized anthropogenic species)", "Chesnokov et al. 2008 (original IMA description, kestrel pellet locality)"],
+      "evidence_level": "chemistry_predicted"
     }
 
   }

@@ -34,9 +34,11 @@ interface CrystalDot {
   y_m: number;          // cell-local meters from yWorld origin
   mineral_id: string;
   evidence_role: string;
-  zone_id: string;
+  zone_id: string;                 // for event-bound dots, holds the synthetic zone id "event:<event_id>:<state>" (e.g. "event:bridgeton_ssr_2010_present:burning")
   host_item_id: string | null;     // when set, the placed-item this crystal grew on (e.g. "lead_acid_battery_3")
   host_item_class: string | null;  // class_id of the host item ("lead_acid_battery"); null when no item-anchor
+  event_id?: string | null;        // when set, the event this dot belongs to (per HANDOFF-BURN-ZONE.md events overlay)
+  event_state?: string | null;     // "burning" | "halo" | "frozen_metastable" — which ring of the event hosts this dot
 }
 
 // Per-mineral display color. Tokens come from minerals.json color_visual but
@@ -81,6 +83,12 @@ const MINERAL_COLORS: { [id: string]: string } = {
   // Native metals
   native_copper: "#b87038",  // copper red-brown
   native_silver: "#dcdce0",  // silver-grey
+
+  // Burn-flagged phases (HANDOFF-BURN-ZONE.md catalog activation)
+  hydrocalumite: "#d8c878",  // pale yellow hexagonal platy
+  anhydrite:     "#e0e4e8",  // tabular white-pale-grey
+  plumbojarosite: "#9c7028", // ochre-brown earthy
+  tinnunculite:  "#f0e8b4",  // pale yellow fibrous
 };
 
 const FALLBACK_DOT_COLOR = "#888888";
@@ -223,6 +231,91 @@ function _itemInZone(item: any, zone: any, geom: CellGeomInput): boolean {
   return false;
 }
 
+// Sample a point inside one of the three event states (burning / halo /
+// frozen_metastable). center_tile + radii are in cell-local tile coords;
+// the function returns world-meter coords (x_m, y_m) matching the
+// renderer's X()/Y() input convention.
+function _sampleEventPoint(
+  event: any,
+  state: "burning" | "halo" | "frozen_metastable",
+  geom: CellGeomInput,
+  rng: () => number,
+): { x_m: number; y_m: number } {
+  const ext = event.spatial_extent ?? {};
+  const centerCol = (ext.center_tile && ext.center_tile[0]) ?? 0;
+  const centerRow = (ext.center_tile && ext.center_tile[1]) ?? 0;
+  // Tile size = 1 m (matches 07-cell-population.ts TILE_SIZE_M).
+  const cxM = geom.nativeFlankWidthM + (centerCol + 0.5);
+  const cyM = geom.cellTopYM + (centerRow + 0.5);
+  const rBurn = (ext.radius_burning_tiles ?? 0);
+  const rHalo = (ext.radius_halo_tiles ?? 0);
+  const rFrozen = (ext.radius_frozen_tiles ?? 0);
+  let rMin = 0;
+  let rMax = 0;
+  if (state === "burning") { rMin = 0; rMax = rBurn; }
+  else if (state === "halo") { rMin = rBurn; rMax = rHalo; }
+  else { rMin = rHalo; rMax = rFrozen; }
+  if (rMax <= rMin) {
+    // Empty annulus — fall back to the event center.
+    return { x_m: cxM, y_m: cyM };
+  }
+  // Sample uniformly in the annulus area: r ~ sqrt(uniform * (rMax^2 - rMin^2) + rMin^2)
+  const r = Math.sqrt(rMin * rMin + rng() * (rMax * rMax - rMin * rMin));
+  const theta = rng() * 2 * Math.PI;
+  return {
+    x_m: cxM + r * Math.cos(theta),
+    y_m: cyM + r * Math.sin(theta),
+  };
+}
+
+// Test whether the placed item's CENTER falls inside a given event state's
+// ring (burning / halo / frozen_metastable annulus). Items live in WORLD-
+// meter coords; event centers live in cell-local tile coords, so we
+// convert the event center to world meters first and then measure radial
+// distance.
+function _itemInEventRing(
+  item: any,
+  event: any,
+  state: "burning" | "halo" | "frozen_metastable",
+  geom: CellGeomInput,
+): boolean {
+  const ext = event.spatial_extent ?? {};
+  const centerCol = (ext.center_tile && ext.center_tile[0]) ?? 0;
+  const centerRow = (ext.center_tile && ext.center_tile[1]) ?? 0;
+  const cxM = geom.nativeFlankWidthM + (centerCol + 0.5);
+  const cyM = geom.cellTopYM + (centerRow + 0.5);
+  const dx = item.x_m - cxM;
+  const dy = item.y_m - cyM;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const rBurn = (ext.radius_burning_tiles ?? 0);
+  const rHalo = (ext.radius_halo_tiles ?? 0);
+  const rFrozen = (ext.radius_frozen_tiles ?? 0);
+  if (state === "burning") return dist <= rBurn;
+  if (state === "halo") return dist > rBurn && dist <= rHalo;
+  return dist > rHalo && dist <= rFrozen;
+}
+
+// Decide which event states host a mineral, given its chemistry_phase tags.
+// A mineral with chemistry_phase ["burn_zone"] grows in the burning core.
+// ["burn_halo"] grows in the halo annulus AND the frozen-metastable ring
+// (the halo's chemistry persists structurally in frozen tiles). A mineral
+// with both ["burn_zone", "burn_halo"] grows across the active and halo
+// rings. ["atmospheric_overlay"] grows in the frozen-metastable ring's
+// outermost surface. Returns the list of states this mineral occupies.
+function _eventStatesForMineral(mineralEntry: any): ("burning" | "halo" | "frozen_metastable")[] {
+  const phases: string[] = (mineralEntry && mineralEntry.chemistry_phase) || [];
+  const states: ("burning" | "halo" | "frozen_metastable")[] = [];
+  if (phases.includes("burn_zone")) states.push("burning");
+  if (phases.includes("burn_halo")) {
+    states.push("halo");
+    states.push("frozen_metastable");
+  }
+  if (phases.includes("atmospheric_overlay")) {
+    if (!states.includes("frozen_metastable")) states.push("frozen_metastable");
+  }
+  return states;
+}
+
 function generateCrystalDots(
   scenario: any,
   zoneSpec: { [id: string]: any },
@@ -244,6 +337,7 @@ function generateCrystalDots(
     const mineralEntry = mineralSpec ? mineralSpec[mineralId] : null;
     const mineralSubstrates: string[] = (mineralEntry && mineralEntry.substrate_grows_on) || [];
 
+    // ── Steady-state zone placement ──
     // Find which zones reference this mineral in expected_mineral_clusters.
     // Note: NOT filtered by scenario.active_zones — see file header for why.
     for (const zoneId of Object.keys(zoneSpec)) {
@@ -277,6 +371,8 @@ function generateCrystalDots(
             zone_id: zoneId,
             host_item_id: host.id,
             host_item_class: host.class_id,
+            event_id: null,
+            event_state: null,
           });
         } else {
           const pt = _sampleZonePoint(zone, geom, rng);
@@ -288,7 +384,66 @@ function generateCrystalDots(
             zone_id: zoneId,
             host_item_id: null,
             host_item_class: null,
+            event_id: null,
+            event_state: null,
           });
+        }
+      }
+    }
+
+    // ── Event-overlay placement ──
+    // Per proposals/HANDOFF-BURN-ZONE.md: burn-flagged minerals nucleate
+    // inside event rings, not steady-state zones. For each event in the
+    // scenario, compute which event states this mineral occupies (from
+    // its chemistry_phase tags), then place dots inside those rings.
+    // Host-anchoring still applies — if a substrate-matching item sits
+    // in the ring, the dot anchors to it; otherwise the dot falls back
+    // to ring-uniform sampling.
+    const events = Array.isArray(scenario.events) ? scenario.events : [];
+    const eventStates = _eventStatesForMineral(mineralEntry);
+    if (events.length > 0 && eventStates.length > 0) {
+      for (const ev of events) {
+        for (const state of eventStates) {
+          const candidateHosts: any[] = mineralSubstrates.length > 0
+            ? itemList.filter((it) => _substratesMatch(it.substrate_tokens, mineralSubstrates) && _itemInEventRing(it, ev, state, geom))
+            : [];
+          const seed = _hashStr(`${scenario.id}|${mineralId}|event:${ev.id}:${state}|${sessionSeed}`);
+          const rng = _mulberry32(seed);
+          // Per-state dot count: same evidence-role scaling as zone dots,
+          // so directly_observed at burn_zone reads the same density as
+          // directly_observed at methanogenic_core.
+          for (let i = 0; i < dotsPerZone; i++) {
+            const syntheticZoneId = `event:${ev.id}:${state}`;
+            if (candidateHosts.length > 0) {
+              const host = candidateHosts[i % candidateHosts.length];
+              const jitterX = (rng() - 0.5) * host.w_m * 0.6;
+              const jitterY = (rng() - 0.5) * host.h_m * 0.6;
+              dots.push({
+                x_m: host.x_m + jitterX,
+                y_m: host.y_m + jitterY,
+                mineral_id: mineralId,
+                evidence_role: role,
+                zone_id: syntheticZoneId,
+                host_item_id: host.id,
+                host_item_class: host.class_id,
+                event_id: ev.id,
+                event_state: state,
+              });
+            } else {
+              const pt = _sampleEventPoint(ev, state, geom, rng);
+              dots.push({
+                x_m: pt.x_m,
+                y_m: pt.y_m,
+                mineral_id: mineralId,
+                evidence_role: role,
+                zone_id: syntheticZoneId,
+                host_item_id: null,
+                host_item_class: null,
+                event_id: ev.id,
+                event_state: state,
+              });
+            }
+          }
         }
       }
     }

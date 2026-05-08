@@ -287,4 +287,101 @@
 //        is preserved (the seed is fixed once BEGIN is pressed); fresh
 //        sessions produce fresh layouts.
 
-const WASTELAND_VERSION = "v9";
+//   v10 — burn-zone activation: Bridgeton SSR scenario + event overlay
+//        (2026-05-07): per proposals/HANDOFF-BURN-ZONE.md the chemistry
+//        catalog has been quietly waiting for burn flags to do anything;
+//        v10 lights them up. Activates the fourth axis of the chemistry
+//        stack — zone × substrate × chemistry × EVENT — by adding a
+//        documented-fire scenario, burn-flagged catalog additions, an
+//        event-overlay renderer pass, and burn-narrator branches.
+//        - data/minerals.json schema bumped to 0.3.0; +4 minerals.
+//          Hydrocalumite (Friedel's salt — landfill_specific via Saffarzadeh
+//          2011 + Piantone HAL synthesis MSWI bottom-ash work; locks Pb
+//          structurally rather than chemically), anhydrite (anthropogenic_
+//          documented; the diagnostic 'fire dried me out' phase from
+//          drywall sulfate dehydration), plumbojarosite (chemistry_
+//          predicted; the burn-halo Pb-Fe-sulfate where cooling acidic
+//          chloride brine meets fire-exposed lead), tinnunculite (chemistry_
+//          predicted in landfills; uric-acid biomineral from diapers + pet
+//          waste reacting with post-burn oxidants — the most narratively
+//          peculiar entry in the catalog). Mixed mineralogical class
+//          activated; chemistry_phase vocabulary gains atmospheric_overlay
+//          for tinnunculite's post-burn rainfall window. Total catalog: 27
+//          minerals (was 23). Jarosite gains chemistry_phase: ['acid',
+//          'burn_halo'] so the same atoms can register at both the steady-
+//          state acidogenic_horizon and the post-quench halo.
+//        - data/precursors.json schema bumped to 0.2.0; +7 burn-event-
+//          overlay precursors (drywall_sulfate_dehydration, concrete_
+//          thermal_decomposition, pvc_pyrolysis_hcl, battery_pb_pyrolysis,
+//          post_burn_acid_brine, biogenic_uric_acid, post_burn_atmospheric_
+//          oxidation), each with phase_window: ['burn_zone'] | ['burn_halo']
+//          | ['atmospheric_overlay']. Total: 27 precursors (was 20).
+//        - data/scenarios.json schema bumped to 0.2.0; +1 scenario.
+//          Bridgeton (MO, USA) at landfill_specific evidence — the
+//          documented subsurface smoldering reaction characterized by MO
+//          DNR since 2010, the strongest documented landfill-fire scenario
+//          available. Aluminum-dross + leachate exotherm trigger (Calder &
+//          Stark 2010 J Hazard Mater). New events[] array on the scenario
+//          schema; Bridgeton populates it with a single subsurface_
+//          smoldering event at concentric-circular spatial extent
+//          (radius_burning_tiles=4, radius_halo_tiles=7, radius_frozen_
+//          tiles=11). Substrate inventory adds aluminum_dross (documented)
+//          + tire_pile_burn_residue (implied) on top of the standard MSW
+//          set. expected_species: hydrocalumite/anhydrite/plumbojarosite/
+//          tinnunculite/ettringite/goethite/jarosite/calcite/sphalerite —
+//          burn-flagged + steady-state coexist because Bridgeton's burn
+//          front is a non-equilibrium overlay, not a steady-state phase
+//          replacement.
+//        - js/99-renderer-cross-section.ts adds an event-overlay layer
+//          rendering THREE concentric tinted rings per event: burning core
+//          (hot-orange, fill-opacity 0.42), halo annulus (chloride-brine
+//          cyan-purple, fill-opacity 0.26 with dashed boundary), frozen-
+//          metastable scar (faint scarred amber, fill-opacity 0.16 with
+//          finer dashes). Composes OVER the steady-state zone tints; the
+//          unburned periphery still reads its base zone chemistry through
+//          the gaps. Per HANDOFF-BURN-ZONE.md UX discipline: tints are
+//          observation-shape, no glow / pulse / saturated alarm-red.
+//        - js/03-crystal-positions.ts gains _eventStatesForMineral,
+//          _itemInEventRing, _sampleEventPoint helpers + an event-overlay
+//          placement pass. For each (event, mineral) where the mineral has
+//          burn_zone / burn_halo / atmospheric_overlay in chemistry_phase,
+//          dots place inside the matching ring(s) of the event. Host-
+//          anchoring still applies (substrate-matching items inside the
+//          ring become hosts; otherwise ring-uniform sampling). New event_
+//          id + event_state fields on CrystalDot; data-event-id +
+//          data-event-state attributes on the rendered <circle>.
+//        - js/04-narrators.ts adds 5 burn-narrators (hydrocalumite,
+//          anhydrite, plumbojarosite, tinnunculite, jarosite — the latter
+//          context-branched between AMD-acid steady-state and burn-halo
+//          event variants). All five follow HANDOFF-BURN-ZONE.md §
+//          "narrator pattern for burn-derived phases": event-sequence
+//          opener (the FIRE is the actor, not the substrate), causal chain
+//          through fuel + ignition → flash transformation → quench →
+//          metastable capture, and closer reframing chemistry as
+//          event-captured rather than equilibrium-resolved. narrateCrystal
+//          gains optional eventEntry + eventState params; CrystalNarrative
+//          gains event_id + event_state fields; zone label resolves to a
+//          synthetic 'BURN HALO — SUBSURFACE SMOLDERING' for event-bound
+//          dots so the examination panel reads correctly.
+//        - index.html boot harness threads data-event-id/data-event-state
+//          off the clicked dot and looks up the matching scenario.events[]
+//          entry, passing it into narrateCrystal alongside the host item.
+//        Engine implications: the events schema is structured for a
+//        future quench-rate-gating engine pass (per HANDOFF-BURN-ZONE.md
+//        recommended sequence step 6). Current renderer reads the radii
+//        directly; a chemistry engine arriving later will compute them
+//        from ignition_step + duration_steps + quench_rate without
+//        breaking the renderer's contract. The Bridgeton SSR is the
+//        first scenario the boss asked the project to build toward —
+//        same atoms, same cell, different mineral assemblage at the burn
+//        front than at its unburned periphery, with the timing of the
+//        fire's end encoded in which metastable phases survived.
+//        Counter-discipline note (per HANDOFF-BURN-ZONE.md §"UX layer
+//        protections"): two-column catalog asymmetry was deferred at
+//        the boss's instruction — the burn scenario shipped first.
+//        Pulse-not-chime and no-toast disciplines hold by absence: there
+//        are no notifications, sound effects, or achievement banners
+//        for the burn event. The fire is observed via tile tints and
+//        catalog updates, not celebrated.
+
+const WASTELAND_VERSION = "v10";

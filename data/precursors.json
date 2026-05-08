@@ -14,8 +14,8 @@
   },
 
   "_audit_summary": {
-    "total_precursors": 20,
-    "_notes": "v0.1.0 precursor spine. Covers the precursor tokens currently referenced in minerals.json decay_precursor arrays plus the narrator-needed acid + chloride + phosphate + carbonate + iron + zinc + copper sources. Each precursor's source_substrate is tagged so narrators can validate against the scenario's substrate_inventory. NOTE: cement_calcite and concrete_calcite coexist as historical near-duplicate tokens in minerals.json — both map to source_substrate=concrete_demolition; rationalizing them is a future minerals.json schema cleanup task. NOT YET COVERED: secondary-redox-cycling precursors (biogenic H2S re-oxidation in burn halos, Fe²⁺/Fe³⁺ flipping, etc.), and atmospheric inputs (rainfall SO4 trace, CO2 dissolution). Slated for v0.2.0 with the burn-zone scenario."
+    "total_precursors": 27,
+    "_notes": "v0.2.0 burn-zone activation pass. v0.1.0 covered the steady-state acid + chloride + phosphate + carbonate + iron + zinc + copper sources; v0.2.0 adds 7 burn-event-overlay precursors so the new burn-flagged minerals (hydrocalumite, anhydrite, plumbojarosite, tinnunculite) compose paragenesis from the same data spine the steady-state narrators use. The burn precursors carry phase_window: ['burn_zone'] or ['burn_halo'] or ['atmospheric_overlay'] so narrators can position them as event-driven rather than steady-state. NOTE: cement_calcite and concrete_calcite coexist as historical near-duplicate tokens in minerals.json — both map to source_substrate=concrete_demolition; rationalizing them is a future minerals.json schema cleanup task. NOT YET COVERED: secondary-redox-cycling precursors (Fe²⁺/Fe³⁺ flipping in long-running halos), Hg/Cd/As volatilization from burn cores, gas-phase intermediates (CO/H2/SO2 fire diagnostics). Slated for the goslarite-first chemistry engine pass when it lands."
   },
 
   "precursors": {
@@ -198,6 +198,69 @@
       "decay_mechanism": "Tire-pile fires pyrolyze the rubber matrix and concentrate ZnS in the post-burn char. Where this char migrates into the active methanogenic chemistry, sphalerite recrystallizes from the char's sulfide reservoir.",
       "phase_window": ["burn_zone", "methanogenic"],
       "narrator_phrase_short": "ZnS-rich tire-burn char"
+    },
+
+    "drywall_sulfate_dehydration": {
+      "id": "drywall_sulfate_dehydration",
+      "species": "anhydrous CaSO4",
+      "source_substrate": "drywall_gypsum",
+      "decay_mechanism": "Drywall gypsum (CaSO4·2H2O) loses both water molecules in fire heat above ~120°C, leaving anhydrous CaSO4 in place. The transformation is the heat itself — no leachate intermediate. What survives quench depends entirely on how quickly ambient pore water re-enters: fast-quench fires freeze anhydrite; slow-quench fires anneal back to gypsum within months.",
+      "phase_window": ["burn_zone"],
+      "narrator_phrase_short": "drywall gypsum dehydrated by fire heat"
+    },
+
+    "concrete_thermal_decomposition": {
+      "id": "concrete_thermal_decomposition",
+      "species": "reactive Ca-Al-OH species + CaO",
+      "source_substrate": "concrete_demolition",
+      "decay_mechanism": "Cement matrix flash-decomposes in fire heat above ~400°C: portlandite dehydrates to lime, calcium-aluminate hydrates fragment to CaO + Al-OH species, and the hydration water released runs the burn zone's high-pH chemistry. The reactive Ca-Al-OH pool is what hydrocalumite then consumes.",
+      "phase_window": ["burn_zone"],
+      "narrator_phrase_short": "thermally decomposed cement matrix"
+    },
+
+    "pvc_pyrolysis_hcl": {
+      "id": "pvc_pyrolysis_hcl",
+      "species": "HCl + Cl-rich brine",
+      "source_substrate": "pvc_plastic",
+      "decay_mechanism": "PVC dehydrochlorinates at 250–350°C in fire heat, releasing ~58% of its mass as gaseous HCl plus benzene; the chloride dissolves into the cooling pore water at the burn front and forms the chloride-rich brine that defines the burn halo. Far faster and more concentrated than the slow-decomposition pvc_hcl precursor active in steady-state cells.",
+      "phase_window": ["burn_zone", "burn_halo"],
+      "narrator_phrase_short": "PVC-pyrolysis chloride brine"
+    },
+
+    "battery_pb_pyrolysis": {
+      "id": "battery_pb_pyrolysis",
+      "species": "fire-mobilized Pb²⁺ + Pb-oxide",
+      "source_substrate": "lead_acid_battery",
+      "decay_mechanism": "Battery casings exposed to fire above ~327°C melt the lead plates and generate Pb-oxide fume that condenses on cooler tile surfaces; cooling acidic chloride brine in the burn halo redissolves this oxide as Pb²⁺. The burn-window Pb supply that feeds plumbojarosite at the alteration ring's outer edge.",
+      "phase_window": ["burn_zone", "burn_halo"],
+      "narrator_phrase_short": "fire-mobilized Pb from battery plates"
+    },
+
+    "post_burn_acid_brine": {
+      "id": "post_burn_acid_brine",
+      "species": "HCl + H2SO4 cooling brine",
+      "source_substrate": "pvc_plastic",
+      "decay_mechanism": "The burn halo's defining chemistry — HCl from PVC pyrolysis, residual SO4 from drywall thermolysis, and the cooling pore water that reassembles them as a low-pH chloride-and-sulfate brine in the alteration ring outside the active fire core. Persists for weeks-to-years post-quench depending on chloride supply.",
+      "phase_window": ["burn_halo"],
+      "narrator_phrase_short": "post-quench acidic chloride-sulfate brine"
+    },
+
+    "biogenic_uric_acid": {
+      "id": "biogenic_uric_acid",
+      "species": "uric acid (C5H4N4O3)",
+      "source_substrate": "organic_slurry",
+      "decay_mechanism": "Diaper urea, pet waste, and protein-decomposition products accumulate uric acid in the organic-rich fines fraction. In post-burn alteration rings, atmospheric oxidants attack the carbonized residues and the uric acid recrystallizes at the surface following the next significant rainfall.",
+      "phase_window": ["atmospheric_overlay"],
+      "narrator_phrase_short": "uric acid from diaper and pet-waste residues"
+    },
+
+    "post_burn_atmospheric_oxidation": {
+      "id": "post_burn_atmospheric_oxidation",
+      "species": "atmospheric O2 + rainfall H2O",
+      "source_substrate": "post_burn_organic_residue",
+      "decay_mechanism": "The alteration ring at the outermost margin of the burn halo, where the fire's footprint has cooled enough to be in contact with atmospheric oxygen and infiltrating rain. Drives the secondary chemistry that crystallizes biogenic biomineral phases like tinnunculite from the carbonized substrate.",
+      "phase_window": ["atmospheric_overlay"],
+      "narrator_phrase_short": "post-burn atmospheric oxidation at the alteration ring surface"
     }
 
   }

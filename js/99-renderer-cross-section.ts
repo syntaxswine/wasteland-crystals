@@ -381,6 +381,53 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
     parts.push(`</g>`); // end zone-overlay group
   }
 
+  // ── Event overlay (fire / smoldering footprints) ──
+  // Per proposals/HANDOFF-BURN-ZONE.md: events are the fourth axis of
+  // chemistry (zone × substrate × chemistry × event). Renders concentric
+  // tinted rings for each event in scenario.events: a burning-core disk
+  // (hot orange, opaque), a halo annulus (chloride-brine cooler tint),
+  // and an outer frozen-metastable annulus (faint scar tint). Ring radii
+  // are read directly from spatial_extent.radius_*_tiles — no engine
+  // time math yet. Composes OVER the steady-state zone tints; the
+  // unburned periphery still reads its normal chemistry through the
+  // base zones.
+  if (scenario && Array.isArray(scenario.events) && scenario.events.length > 0) {
+    parts.push(`<g class="event-overlay">`);
+    for (const ev of scenario.events) {
+      if (!ev.spatial_extent || ev.spatial_extent.type !== "concentric_circular") continue;
+      const ext = ev.spatial_extent;
+      const centerCol = ext.center_tile[0];
+      const centerRow = ext.center_tile[1];
+      // Event center in world meters: cell-local tile coords + native flank offset.
+      const cxM = cfg.nativeFlankWidthM + (centerCol + 0.5);
+      const cyM = cellTopYM + (centerRow + 0.5);
+      const cxPx = X(cxM);
+      const cyPx = Y(cyM);
+      // Tile units = 1 m = PX_PER_M pixels.
+      const rBurn = (ext.radius_burning_tiles ?? 0) * PX_PER_M;
+      const rHalo = (ext.radius_halo_tiles ?? 0) * PX_PER_M;
+      const rFrozen = (ext.radius_frozen_tiles ?? 0) * PX_PER_M;
+      // Frozen-metastable scar (outermost, paint first so halo + core
+      // sit on top).
+      if (rFrozen > rHalo) {
+        parts.push(`<circle class="event-frozen" cx="${cxPx}" cy="${cyPx}" r="${rFrozen}" data-event-id="${ev.id}" data-state="frozen_metastable" />`);
+      }
+      // Halo annulus.
+      if (rHalo > rBurn) {
+        parts.push(`<circle class="event-halo" cx="${cxPx}" cy="${cyPx}" r="${rHalo}" data-event-id="${ev.id}" data-state="halo" />`);
+      }
+      // Burning core (innermost, hottest).
+      if (rBurn > 0) {
+        parts.push(`<circle class="event-burning" cx="${cxPx}" cy="${cyPx}" r="${rBurn}" data-event-id="${ev.id}" data-state="burning" />`);
+      }
+      // Event label — small, just above the burning core, naming the event type.
+      const labelY = cyPx - rFrozen - 4;
+      const labelText = (ev.type ?? "event").toString().toUpperCase().replace(/_/g, " ");
+      parts.push(`<text class="event-label" x="${cxPx}" y="${labelY}" text-anchor="middle">${labelText}</text>`);
+    }
+    parts.push(`</g>`); // end event-overlay
+  }
+
   // ── Crystal-dot overlay ──
   // Placeholder for the future per-cell crystal-growth output. Generates
   // deterministic dots from scenario.expected_species × zones.json
@@ -417,7 +464,9 @@ function buildSchematicSVG(cfg: SchematicConfig, opts: RenderOpts): string {
       // strings when the dot fell back to zone-uniform placement).
       const hostId = d.host_item_id ?? "";
       const hostClass = d.host_item_class ?? "";
-      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" />`);
+      const eventId = d.event_id ?? "";
+      const eventState = d.event_state ?? "";
+      parts.push(`<circle class="dot dot-${d.mineral_id} dot-${d.evidence_role}" cx="${X(d.x_m)}" cy="${Y(d.y_m)}" r="${r}" fill="${fill}" data-mineral-id="${d.mineral_id}" data-zone-id="${d.zone_id}" data-evidence-role="${d.evidence_role}" data-host-item-id="${hostId}" data-host-item-class="${hostClass}" data-event-id="${eventId}" data-event-state="${eventState}" />`);
     }
     parts.push(`</g>`); // end crystal-dots group
   }
@@ -664,6 +713,23 @@ function svgStyle(): string {
     /* Selected dot — a brighter halo so the examined crystal reads at a
        glance against the cell's other paragenesis. */
     .dot.selected { stroke: #ffd76a; stroke-width: 1.2; stroke-opacity: 1.0; }
+
+    /* ── Event overlay (fire / smoldering footprints) ──
+       Three concentric rings per event: burning core (hot orange, highest
+       opacity — the fire is happening here), halo (chloride-brine cooler
+       cyan-purple tint, mid-opacity — the chemistry is currently quenching
+       here), and frozen-metastable (faint scarred amber, low opacity — the
+       front already passed and the chemistry is locked). Composes OVER the
+       steady-state zone tints; the unburned periphery still reads its base
+       chemistry through the event-overlay's gaps. Per HANDOFF-BURN-ZONE.md:
+       'a burn event should never feel like an achievement; it should feel
+       like reading a quarterly report from a future surveyor.' Tints are
+       observation-shape, not achievement-shape — no glow, no pulse, no
+       saturated alarm-red. */
+    .event-burning { fill: #d44820; fill-opacity: 0.42; stroke: #f08038; stroke-width: 0.8; stroke-opacity: 0.75; }
+    .event-halo    { fill: #6c5896; fill-opacity: 0.26; stroke: #9080c0; stroke-width: 0.6; stroke-dasharray: 4 3; stroke-opacity: 0.55; }
+    .event-frozen  { fill: #8c6c40; fill-opacity: 0.16; stroke: #a88858; stroke-width: 0.5; stroke-dasharray: 2 4; stroke-opacity: 0.45; }
+    .event-label   { fill: #f0a060; font-family: ui-monospace, "Cascadia Mono", monospace; font-size: 9px; letter-spacing: 0.12em; }
 
     /* ── Item layer ──
        Discrete inventory items snapped to a 1m × 1m tile grid. Coarse-rigid
